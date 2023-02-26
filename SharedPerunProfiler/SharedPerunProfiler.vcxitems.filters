@@ -1,0 +1,35 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="$(MSBuildThisFileDirectory)CoreProfiler.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)CoreProfilerFactory.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)DLLMain.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)OS.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)Mutex.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="$(MSBuildThisFileDirectory)CoreProfiler.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)CoreProfilerFactory.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)OS.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)Mutex.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)Common.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)AutoLock.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Common">
+      <UniqueIdentifier>{6454cbb3-d26a-47ab-83f1-38704c9c2ba4}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

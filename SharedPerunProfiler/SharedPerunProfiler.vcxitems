@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Label="Globals">
+    <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <ItemsProjectGuid>{7e319842-bb78-4000-bbfa-132f05451354}</ItemsProjectGuid>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(MSBuildThisFileDirectory)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ProjectCapability Include="SourceItemsFromImports" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="$(MSBuildThisFileDirectory)CoreProfiler.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)CoreProfilerFactory.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)DLLMain.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)Mutex.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)OS.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="$(MSBuildThisFileDirectory)AutoLock.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)CoreProfiler.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)CoreProfilerFactory.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)Common.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)Mutex.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)OS.h" />
+  </ItemGroup>
+</Project>
