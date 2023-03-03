@@ -7,19 +7,21 @@ using namespace std;
 extern "C" BOOL __stdcall DllMain(HINSTANCE hInstDll, DWORD reason, PVOID) {
 	switch (reason) {
 	case DLL_PROCESS_ATTACH:
-		cout << "Profiler DLL loaded into PID %d", OS::GetPid();
+		cout << "Profiler DLL loaded into PID " << OS::GetPid() << "\n";
 		break;
 
 	case DLL_PROCESS_DETACH:
-		cout << "Profiler DLL unloaded from PID %d", OS::GetPid();
+		cout << "Profiler DLL unloaded from PID" << OS::GetPid() << "\n";
 		break;
 	}
 	return TRUE;
 }
 
-class __declspec(uuid("805A308B-061C-47F3-9B30-F785C3186E81")) CoreProfiler;
+class __declspec(uuid("32E2F4DA-1BEA-47ea-88F9-C5DAF691C94A")) CoreProfiler;
 
 extern "C" HRESULT __stdcall DllGetClassObject(REFCLSID rclsid, REFIID riid, void** ppv) {
+	cout << "Dll get class objcet" << "\n";
+
 	if (rclsid == __uuidof(CoreProfiler)) {
 		static CoreProfilerFactory factory;
 		return factory.QueryInterface(riid, ppv);
