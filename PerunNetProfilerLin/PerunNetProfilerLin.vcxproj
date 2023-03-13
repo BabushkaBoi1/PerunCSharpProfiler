@@ -72,7 +72,6 @@
     <UseDebugLibraries>true</UseDebugLibraries>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
-  <ImportGroup Label="ExtensionSettings" />
   <ImportGroup Label="Shared">
     <Import Project="..\SharedPerunProfiler\SharedPerunProfiler.vcxitems" Label="Shared" />
   </ImportGroup>
@@ -102,5 +101,13 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <ImportGroup Label="ExtensionTargets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.targets" />
+  </ImportGroup>
+  <ImportGroup Label = "ExtensionSettings">
+    <Import Project = "$(VCTargetsPath)\BuildCustomizations\masm.props" />
+  </ImportGroup>
+  <ItemGroup>
+    <MASM Include="../SharedPerunProfiler/asm/systemv/asmhelpers.S" Condition="'$(Platform)' == 'x64'" />
+  </ItemGroup>
 </Project>
