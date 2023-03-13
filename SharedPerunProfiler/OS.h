@@ -1,5 +1,5 @@
 #pragma once
-
+#include <iostream>
 #include <string>
 #include <common.h>
 
@@ -10,5 +10,7 @@ public:
 	static int GetTid();
 	static std::string GetCurrentDir();
 	static std::string UnicodeToAnsi(const WCHAR* str);
+	static double GetCpuTime();
+	static double GetWallTime();
 };
 

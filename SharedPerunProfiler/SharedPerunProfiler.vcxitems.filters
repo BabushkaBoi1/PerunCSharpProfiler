@@ -10,6 +10,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)Mutex.cpp">
       <Filter>Common</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)Logger.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="$(MSBuildThisFileDirectory)CoreProfiler.h" />
@@ -26,6 +27,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)AutoLock.h">
       <Filter>Common</Filter>
     </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)Logger.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Common">

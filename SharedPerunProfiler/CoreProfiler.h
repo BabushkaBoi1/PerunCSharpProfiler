@@ -6,6 +6,9 @@
 #include <atomic>
 #include <string>
 #include <map>
+#include <time.h>  
+#include "Logger.h"
+
 
 #pragma region ClassInfo
 struct ClassInfo {
@@ -26,6 +29,13 @@ struct std::hash<ClassInfo> {
 	}
 };
 #pragma endregion
+
+typedef struct Data {
+	int funcId;
+} MyData;
+
+std::string GetTypeName(mdTypeDef type, ModuleID module);
+std::string GetMethodName(FunctionID function);
 
 class CoreProfiler : public ICorProfilerCallback8 {
 public:
@@ -124,11 +134,11 @@ public:
 	HRESULT __stdcall ModuleInMemorySymbolsUpdated(ModuleID moduleId) override;
 	HRESULT __stdcall DynamicMethodJITCompilationStarted(FunctionID functionId, BOOL fIsSafeToBlock, LPCBYTE pILHeader, ULONG cbILHeader) override;
 	HRESULT __stdcall DynamicMethodJITCompilationFinished(FunctionID functionId, HRESULT hrStatus, BOOL fIsSafeToBlock) override;
+	//static void Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo);
+	//static void Leave(FunctionID functionID, COR_PRF_ELT_INFO eltInfo);
+	//static void TailCall(FunctionID functionID, COR_PRF_ELT_INFO eltInfo);
 
 private:
-	std::string GetTypeName(mdTypeDef type, ModuleID module) const;
-	std::string GetMethodName(FunctionID function) const;
-
 	static HRESULT __stdcall StackSnapshotCB(
 		FunctionID funcId,
 		UINT_PTR ip,
@@ -140,6 +150,6 @@ private:
 
 	std::atomic<unsigned> _refCount{ 1 };
 	std::map<ClassInfo, std::string> _types;
-	CComPtr<ICorProfilerInfo8> _info;
+
 };
 

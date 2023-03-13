@@ -6,6 +6,123 @@
 #include <iostream>
 using namespace std;
 
+CComPtr<ICorProfilerInfo8> _info;
+//Logger logger;
+
+EXTERN_C void _stdcall EnterStub(FunctionIDOrClientID functionId, COR_PRF_ELT_INFO eltInfo)
+{
+	auto name = GetMethodName(functionId.functionID);
+	cout << "Enter function:" << name << ", cpu time:" << OS::GetCpuTime() << ", wall time: " << OS::GetWallTime() << "; \n";
+}
+
+EXTERN_C HRESULT __stdcall LeaveStub(FunctionID functionId, COR_PRF_ELT_INFO eltInfo)
+{
+	//CoreProfiler::Leave(functionId, eltInfo);
+	return S_OK;
+}
+
+EXTERN_C HRESULT __stdcall TailcallStub(FunctionID functionId, COR_PRF_ELT_INFO eltInfo)
+{
+	//CoreProfiler::TailCall(functionId, eltInfo);
+	return S_OK;
+}
+
+void* clientData()
+{
+	return *clientData;
+}
+
+UINT_PTR __stdcall Mapper2(FunctionID functionId, void* clientData, BOOL* pHookFunction)
+{
+	ModuleID moduleId;
+	mdToken token;
+	ClassID classId;
+	if (FAILED(_info->GetFunctionInfo(functionId, &classId, &moduleId, &token))) {
+		pHookFunction = nullptr;
+		return 0;
+	}
+
+	LPCBYTE loadAddress;
+	ULONG nameLen = 0;
+	AssemblyID assemblyId;
+
+	if (SUCCEEDED(_info->GetModuleInfo(moduleId, &loadAddress, nameLen, &nameLen, NULL, &assemblyId)))
+	{
+		WCHAR* pszName = new WCHAR[nameLen];
+		_info->GetAssemblyInfo(assemblyId, nameLen, &nameLen, pszName, NULL, NULL);
+
+		if (OS::UnicodeToAnsi(pszName).find("System") != string::npos)
+		{
+			pHookFunction = nullptr;
+			return functionId;
+		}
+		if (OS::UnicodeToAnsi(pszName).find("Microsoft") != string::npos)
+		{
+			pHookFunction = nullptr;
+			return 0;
+		}
+		delete[] pszName;
+	}
+	return functionId;
+}
+
+#ifdef _X86_
+#ifdef _WIN32
+void __declspec(naked) EnterNaked(FunctionIDOrClientID functionIDOrClientID, COR_PRF_ELT_INFO eltInfo)
+{
+	__asm
+	{
+		PUSH EAX
+		PUSH ECX
+		PUSH EDX
+		PUSH[ESP + 16]
+		CALL EnterStub
+		POP EDX
+		POP ECX
+		POP EAX
+		RET 8
+	}
+}
+
+void __declspec(naked) LeaveNaked(FunctionIDOrClientID functionIDOrClientID, COR_PRF_ELT_INFO eltInfo)
+{
+	__asm
+	{
+		PUSH EAX
+		PUSH ECX
+		PUSH EDX
+		PUSH[ESP + 16]
+		CALL LeaveStub
+		POP EDX
+		POP ECX
+		POP EAX
+		RET 8
+	}
+}
+
+void __declspec(naked) TailcallNaked(FunctionIDOrClientID functionIDOrClientID, COR_PRF_ELT_INFO eltInfo)
+{
+	__asm
+	{
+		PUSH EAX
+		PUSH ECX
+		PUSH EDX
+		PUSH[ESP + 16]
+		CALL TailcallStub
+		POP EDX
+		POP ECX
+		POP EAX
+		RET 8
+	}
+}
+#endif
+#elif defined(_AMD64_)
+EXTERN_C void EnterNaked(FunctionIDOrClientID functionIDOrClientID, COR_PRF_ELT_INFO eltInfo);
+EXTERN_C void LeaveNaked(FunctionIDOrClientID functionIDOrClientID, COR_PRF_ELT_INFO eltInfo);
+EXTERN_C void TailcallNaked(FunctionIDOrClientID functionIDOrClientID, COR_PRF_ELT_INFO eltInfo);
+#endif
+
+
 HRESULT __stdcall CoreProfiler::QueryInterface(REFIID riid, void** ppvObject) {
 	if (ppvObject == nullptr)
 		return E_POINTER;
@@ -40,6 +157,9 @@ ULONG __stdcall CoreProfiler::Release(void) {
 }
 
 HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
+
+	cout << "Profiler initialize, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
+
 	pICorProfilerInfoUnk->QueryInterface(&_info);
 	assert(_info);
 
@@ -49,17 +169,48 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 		COR_PRF_MONITOR_GC |
 		COR_PRF_MONITOR_CLASS_LOADS |
 		COR_PRF_MONITOR_THREADS |
-		COR_PRF_MONITOR_EXCEPTIONS |
-		COR_PRF_MONITOR_JIT_COMPILATION);
+		COR_PRF_MONITOR_JIT_COMPILATION |
+		COR_PRF_MONITOR_ENTERLEAVE |
+		COR_PRF_ENABLE_FUNCTION_ARGS |
+		COR_PRF_ENABLE_FUNCTION_RETVAL |
+		COR_PRF_ENABLE_FRAME_INFO);
 	//|	COR_PRF_MONITOR_OBJECT_ALLOCATED | COR_PRF_ENABLE_OBJECT_ALLOCATED);
+
+	_info->SetEnterLeaveFunctionHooks3WithInfo(EnterNaked, LeaveNaked, TailcallNaked);
+
+	_info->SetFunctionIDMapper2(Mapper2, clientData);
 
 	return S_OK;
 }
 
 HRESULT CoreProfiler::Shutdown() {
+	cout << "Profiler shutdown, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
 
 	return S_OK;
 }
+
+
+
+//void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
+//{
+//	auto name = GetMethodName(functionID);
+//	cout << "Enter function:" << name << ", cpu time:" << OS::GetCpuTime() << ", wall time: " << OS::GetWallTime() << "; \n";
+//	//logger.LogFunction(name, nullptr, 0, 0);
+//}
+//
+//void CoreProfiler::Leave(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
+//{
+//	auto name = GetMethodName(functionID);
+//	cout << "Leave function:" << name << ", cpu time:" << OS::GetCpuTime() << ", wall time: " << OS::GetWallTime() << "; \n";
+//	//logger.LogFunction(name, nullptr, 0, 0);
+//}
+//
+//void CoreProfiler::TailCall(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
+//{
+//	auto name = GetMethodName(functionID);
+//	cout << "Tailcall function:" << name << ", cpu time:" << OS::GetCpuTime() << ", wall time: " << OS::GetWallTime() << "; \n";
+//}
+
 
 HRESULT CoreProfiler::AppDomainCreationStarted(AppDomainID appDomainId) {
 	return S_OK;
@@ -98,6 +249,7 @@ HRESULT CoreProfiler::ModuleLoadStarted(ModuleID moduleId) {
 }
 
 HRESULT CoreProfiler::ModuleLoadFinished(ModuleID moduleId, HRESULT hrStatus) {
+
 	return S_OK;
 }
 
@@ -158,10 +310,14 @@ HRESULT CoreProfiler::JITInlining(FunctionID callerId, FunctionID calleeId, BOOL
 }
 
 HRESULT CoreProfiler::ThreadCreated(ThreadID threadId) {
+	cout << "Thread with id: " << threadId << " was created \n";
+
 	return S_OK;
 }
 
 HRESULT CoreProfiler::ThreadDestroyed(ThreadID threadId) {
+	cout << "Thread with id: " << threadId << " was destroyed \n";
+
 	return S_OK;
 }
 
@@ -417,17 +573,39 @@ HRESULT CoreProfiler::DynamicMethodJITCompilationFinished(FunctionID functionId,
 	return S_OK;
 }
 
-std::string CoreProfiler::GetTypeName(mdTypeDef type, ModuleID module) const {
+
+std::string GetTypeName(mdTypeDef type, ModuleID module) {
+	CComPtr<IMetaDataImport> spMetadata;
+	if (SUCCEEDED(_info->GetModuleMetaData(module, ofRead, IID_IMetaDataImport, reinterpret_cast<IUnknown**>(&spMetadata)))) {
+		WCHAR name[256];
+		ULONG nameSize = 256;
+		DWORD flags;
+		mdTypeDef baseType;
+		if (SUCCEEDED(spMetadata->GetTypeDefProps(type, name, 256, &nameSize, &flags, &baseType))) {
+			return OS::UnicodeToAnsi(name);
+		}
+	}
 	return "";
 }
 
-std::string CoreProfiler::GetMethodName(FunctionID function) const {
-	return "";
-}
+std::string GetMethodName(FunctionID function) {
+	ModuleID module;
+	mdToken token;
+	mdTypeDef type;
+	ClassID classId;
+	if (FAILED(_info->GetFunctionInfo(function, &classId, &module, &token)))
+		return "";
 
-HRESULT __stdcall CoreProfiler::StackSnapshotCB(FunctionID funcId, UINT_PTR ip, COR_PRF_FRAME_INFO frameInfo,
-	ULONG32 contextSize, BYTE context[], void* clientData) {
-	// TODO
-	return S_OK;
-}
+	CComPtr<IMetaDataImport> spMetadata;
+	if (FAILED(_info->GetModuleMetaData(module, ofRead, IID_IMetaDataImport, reinterpret_cast<IUnknown**>(&spMetadata))))
+		return "";
+	PCCOR_SIGNATURE sig;
+	ULONG blobSize, size, attributes;
+	WCHAR name[256];
+	DWORD flags;
+	ULONG codeRva;
+	if (FAILED(spMetadata->GetMethodProps(token, &type, name, 256, &size, &attributes, &sig, &blobSize, &codeRva, &flags)))
+		return "";
 
+	return GetTypeName(type, module) + "::" + OS::UnicodeToAnsi(name) + "()";
+}
