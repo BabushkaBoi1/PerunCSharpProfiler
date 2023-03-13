@@ -134,9 +134,9 @@ public:
 	HRESULT __stdcall ModuleInMemorySymbolsUpdated(ModuleID moduleId) override;
 	HRESULT __stdcall DynamicMethodJITCompilationStarted(FunctionID functionId, BOOL fIsSafeToBlock, LPCBYTE pILHeader, ULONG cbILHeader) override;
 	HRESULT __stdcall DynamicMethodJITCompilationFinished(FunctionID functionId, HRESULT hrStatus, BOOL fIsSafeToBlock) override;
-	//static void Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo);
-	//static void Leave(FunctionID functionID, COR_PRF_ELT_INFO eltInfo);
-	//static void TailCall(FunctionID functionID, COR_PRF_ELT_INFO eltInfo);
+	static void Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo);
+	static void Leave(FunctionID functionID, COR_PRF_ELT_INFO eltInfo);
+	static void TailCall(FunctionID functionID, COR_PRF_ELT_INFO eltInfo);
 
 private:
 	static HRESULT __stdcall StackSnapshotCB(

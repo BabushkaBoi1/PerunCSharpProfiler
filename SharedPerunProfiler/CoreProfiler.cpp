@@ -11,20 +11,29 @@ CComPtr<ICorProfilerInfo8> _info;
 
 EXTERN_C void _stdcall EnterStub(FunctionIDOrClientID functionId, COR_PRF_ELT_INFO eltInfo)
 {
-	auto name = GetMethodName(functionId.functionID);
-	cout << "Enter function:" << name << ", cpu time:" << OS::GetCpuTime() << ", wall time: " << OS::GetWallTime() << "; \n";
+	if (functionId.functionID == 0)
+	{
+		return;
+	}
+	CoreProfiler::Enter(functionId.functionID, eltInfo);
 }
 
-EXTERN_C HRESULT __stdcall LeaveStub(FunctionID functionId, COR_PRF_ELT_INFO eltInfo)
+EXTERN_C void _stdcall LeaveStub(FunctionID functionId, COR_PRF_ELT_INFO eltInfo)
 {
-	//CoreProfiler::Leave(functionId, eltInfo);
-	return S_OK;
+	if (functionId == 0)
+	{
+		return;
+	}
+	CoreProfiler::Leave(functionId, eltInfo);
 }
 
-EXTERN_C HRESULT __stdcall TailcallStub(FunctionID functionId, COR_PRF_ELT_INFO eltInfo)
+EXTERN_C void _stdcall TailcallStub(FunctionID functionId, COR_PRF_ELT_INFO eltInfo)
 {
-	//CoreProfiler::TailCall(functionId, eltInfo);
-	return S_OK;
+	if (functionId == 0)
+	{
+		return;
+	}
+	CoreProfiler::TailCall(functionId, eltInfo);
 }
 
 void* clientData()
@@ -54,7 +63,7 @@ UINT_PTR __stdcall Mapper2(FunctionID functionId, void* clientData, BOOL* pHookF
 		if (OS::UnicodeToAnsi(pszName).find("System") != string::npos)
 		{
 			pHookFunction = nullptr;
-			return functionId;
+			return 0;
 		}
 		if (OS::UnicodeToAnsi(pszName).find("Microsoft") != string::npos)
 		{
@@ -191,25 +200,25 @@ HRESULT CoreProfiler::Shutdown() {
 
 
 
-//void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
-//{
-//	auto name = GetMethodName(functionID);
-//	cout << "Enter function:" << name << ", cpu time:" << OS::GetCpuTime() << ", wall time: " << OS::GetWallTime() << "; \n";
-//	//logger.LogFunction(name, nullptr, 0, 0);
-//}
-//
-//void CoreProfiler::Leave(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
-//{
-//	auto name = GetMethodName(functionID);
-//	cout << "Leave function:" << name << ", cpu time:" << OS::GetCpuTime() << ", wall time: " << OS::GetWallTime() << "; \n";
-//	//logger.LogFunction(name, nullptr, 0, 0);
-//}
-//
-//void CoreProfiler::TailCall(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
-//{
-//	auto name = GetMethodName(functionID);
-//	cout << "Tailcall function:" << name << ", cpu time:" << OS::GetCpuTime() << ", wall time: " << OS::GetWallTime() << "; \n";
-//}
+void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
+{
+	auto name = GetMethodName(functionID);
+	cout << "Enter function:" << name << ", cpu time:" << OS::GetCpuTime() << ", wall time: " << OS::GetWallTime() << "; \n";
+	//logger.LogFunction(name, nullptr, 0, 0);
+}
+
+void CoreProfiler::Leave(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
+{
+	auto name = GetMethodName(functionID);
+	cout << "Leave function:" << name << ", cpu time:" << OS::GetCpuTime() << ", wall time: " << OS::GetWallTime() << "; \n";
+	//logger.LogFunction(name, nullptr, 0, 0);
+}
+
+void CoreProfiler::TailCall(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
+{
+	auto name = GetMethodName(functionID);
+	cout << "Tailcall function:" << name << ", cpu time:" << OS::GetCpuTime() << ", wall time: " << OS::GetWallTime() << "; \n";
+}
 
 
 HRESULT CoreProfiler::AppDomainCreationStarted(AppDomainID appDomainId) {
