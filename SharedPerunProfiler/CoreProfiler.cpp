@@ -192,7 +192,7 @@ ULONG __stdcall CoreProfiler::Release(void) {
 HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 	g_CoreProfiler = this;
 	
-	cout << "Profiler initialize, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
+	std::cout << "Profiler initialize, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
 
 	pICorProfilerInfoUnk->QueryInterface(&_info);
 	assert(_info);
@@ -241,8 +241,9 @@ void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 	std::map<FunctionID, std::string>::iterator iter = m_functionMap.find(functionID);
 	if (iter != m_functionMap.end())
 	{
-		logger->LogFunction(iter->second, iter->second, 0, 0);
-		cout << "Enter function:" << "id: " << functionID << ", name:" << iter->second << ", cpu time:" << OS::GetCpuTime() << ", wall time: " << OS::GetWallTime() << "; \n";
+		Logger::LOG("Function enter 0x%p destroyed", functionID);
+
+		//cout << "Enter function:" << "id: " << functionID << ", name:" << iter->second << ", cpu time:" << OS::GetCpuTime() << ", wall time: " << OS::GetWallTime() << "; \n";
 	}
 }
 

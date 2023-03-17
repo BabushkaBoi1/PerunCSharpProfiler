@@ -1,28 +1,51 @@
 #pragma once
-#include <string>
-#include <iostream>
-#include <fstream>
-#include "Logger.h"
-#include "OS.h"
-#include <assert.h>
-#include <time.h>
-#include <iomanip>
-#include "AutoLock.h"
-#include "Mutex.h"
 
-class Logger
-{
+#include <fstream>
+#include "Mutex.h"
+#include "AutoLock.h"
+
+
+enum class LogLevel {
+	Verbose,
+	Debug,
+	Info,
+	Warning,
+	Error,
+	Fatal
+};
+
+class Logger final {
 public:
 	static Logger& Get();
 	static void Shutdown();
-	
-	__forceinline static void LogFunction(std::string functionName, std::string moduleName, clock_t cpuTime, clock_t wallTime);
 
+	LogLevel GetLevel() const;
+	void SetLevel(LogLevel level);
+
+	template<typename... Args>
+	void Log(Args&&... args) {
+		char buffer[1 << 10];
+#ifdef _WINDOWS
+		sprintf_s(buffer, args...);
+#else
+		sprintf(buffer, args...);
+#endif
+		DoLog(buffer);
+
+	}
+	template<typename... Args>
+	__forceinline static void LOG(Args&&... args) {
+		Get().Log(std::forward<Args>(args)...);
+	}
 
 private:
 	Logger();
+	void DoLog(const char* text);
 	void Term();
+
+private:
 	Mutex _lock;
-	std::ofstream file;
+	std::ofstream _file;
+	LogLevel _level = LogLevel::Debug;
 };
 
