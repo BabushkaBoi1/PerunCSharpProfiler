@@ -1,7 +1,8 @@
+#include <iostream>
+
 #include "Common.h"
 #include "OS.h"
 #include "CoreProfilerFactory.h"
-#include <iostream>
 using namespace std;
 
 extern "C" BOOL __stdcall DllMain(HINSTANCE hInstDll, DWORD reason, PVOID) {

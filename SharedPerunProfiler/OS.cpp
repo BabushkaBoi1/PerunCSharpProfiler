@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <time.h>
+#include <sys/time.h>
 #endif
 
 std::string OS::ReadEnvironmentVariable(const char* name) {
