@@ -21,7 +21,6 @@ extern "C" BOOL __stdcall DllMain(HINSTANCE hInstDll, DWORD reason, PVOID) {
 class __declspec(uuid("32E2F4DA-1BEA-47ea-88F9-C5DAF691C94A")) CoreProfiler;
 
 extern "C" HRESULT __stdcall DllGetClassObject(REFCLSID rclsid, REFIID riid, void** ppv) {
-	cout << "Dll get class objcet" << "\n";
 
 	if (rclsid == __uuidof(CoreProfiler)) {
 		static CoreProfilerFactory factory;

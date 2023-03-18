@@ -19,18 +19,15 @@ public:
 	static Logger& Get();
 	static void Shutdown();
 
-	LogLevel GetLevel() const;
-	void SetLevel(LogLevel level);
-
 	template<typename... Args>
-	void Log(Args&&... args) {
+	void Log(double cpuTime, Args&&... args) {
 		char buffer[1 << 10];
 #ifdef _WINDOWS
 		sprintf_s(buffer, args...);
 #else
 		sprintf(buffer, args...);
 #endif
-		DoLog(buffer);
+		DoLog(cpuTime, buffer);
 
 	}
 	template<typename... Args>
@@ -40,7 +37,7 @@ public:
 
 private:
 	Logger();
-	void DoLog(const char* text);
+	void DoLog(double cpuTime, const char* text);
 	void Term();
 
 private:

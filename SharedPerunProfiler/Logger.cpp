@@ -14,14 +14,6 @@ void Logger::Shutdown() {
 	Get().Term();
 }
 
-LogLevel Logger::GetLevel() const {
-	return _level;
-}
-
-void Logger::SetLevel(LogLevel level) {
-	_level = level;
-}
-
 void Logger::Term() {
 	if (_file.is_open()) {
 		_file.flush();
@@ -33,7 +25,7 @@ void Logger::Term() {
 #include <Windows.h>
 #endif
 
-void Logger::DoLog(const char* text) {
+void Logger::DoLog(double cpuTime, const char* text) {
 	char time[48];
 	const auto now = ::time(nullptr);
 #ifdef _WINDOWS
@@ -51,6 +43,7 @@ void Logger::DoLog(const char* text) {
 	std::stringstream message;
 	message
 		<< "[" << time << "." << std::setw(6) << std::setfill('0') << (ts.tv_nsec / 1000) << "]"
+		<< " [" << cpuTime << "]"
 		<< " [" << OS::GetPid() << ","
 		<< OS::GetTid() << "] "
 		<< text << std::endl;
@@ -69,7 +62,7 @@ void Logger::DoLog(const char* text) {
 
 Logger::Logger() {
 	auto logDir = OS::ReadEnvironmentVariable("PROFILER_LOG_FILE");
-	std::cout << "logdir " << logDir;
+	
 	if (logDir.empty())
 		logDir = OS::GetCurrentDir();
 
@@ -83,7 +76,7 @@ Logger::Logger() {
 #else
 	auto tlocal = localtime(&now);
 #endif
-	::strftime(time, sizeof(time), "PerunCSharpProfiler_%F_%H%M%S.log", tlocal);
+	::strftime(time, sizeof(time), "PerunCSharpProfiler_%F_%H%M.log", tlocal);
 
 	_file.open(logDir + "/" + time, std::ios::out);
 
