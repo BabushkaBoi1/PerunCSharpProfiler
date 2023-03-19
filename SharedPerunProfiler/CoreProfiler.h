@@ -8,6 +8,7 @@
 #include <map>
 #include <time.h>  
 #include "Logger.h"
+#include <list>
 
 
 #pragma region ClassInfo
@@ -30,9 +31,13 @@ struct std::hash<ClassInfo> {
 };
 #pragma endregion
 
-typedef struct Data {
+typedef struct FunctionInfo {
 	int funcId;
-} MyData;
+	int threadId;
+	std::string name;
+	std::list<double> cpuTimeEnter;
+	std::list<double> cpuTimeLeave;
+} FunctionInfo;
 
 std::string GetTypeName(mdTypeDef type, ModuleID module);
 std::string GetMethodName(FunctionID function);
@@ -150,7 +155,7 @@ private:
 		void* clientData
 	);
 
-	std::map<FunctionID, std::string> m_functionMap;
+	std::map<FunctionID, std::map<int, FunctionInfo*>> m_functionMap;
 	std::atomic<unsigned> _refCount{ 1 };
 	std::map<ClassInfo, std::string> _types;
 

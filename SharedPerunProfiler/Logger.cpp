@@ -5,6 +5,7 @@
 #include <time.h>
 #include <iomanip>
 
+
 Logger& Logger::Get() {
 	static Logger logger;
 	return logger;
@@ -25,7 +26,7 @@ void Logger::Term() {
 #include <Windows.h>
 #endif
 
-void Logger::DoLog(double cpuTime, const char* text) {
+void Logger::DoLog(std::list<double> cpuTimeEnter, std::list<double> cpuTimeLeave, const char* text) {
 	char time[48];
 	const auto now = ::time(nullptr);
 #ifdef _WINDOWS
@@ -41,11 +42,21 @@ void Logger::DoLog(double cpuTime, const char* text) {
 	strftime(time, sizeof(time), "%D %T", plt);
 
 	std::stringstream message;
+
 	message
 		<< "[" << time << "." << std::setw(6) << std::setfill('0') << (ts.tv_nsec / 1000) << "]"
-		<< " [" << cpuTime << "]"
 		<< " [" << OS::GetPid() << ","
-		<< OS::GetTid() << "] "
+		<< OS::GetTid() << "] Enter cpu time:";
+	for (auto cpuTime : cpuTimeEnter)
+	{
+		message << "[" << cpuTime << "]";
+	}
+	message << "enter func";
+	for (auto cpuTime : cpuTimeLeave)
+	{
+		message << "[" << cpuTime << "]";
+	}
+	message
 		<< text << std::endl;
 
 	auto smessage = message.str();

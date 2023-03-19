@@ -1,8 +1,6 @@
 #!/bin/sh
 
-CXX_FLAGS="$CXX_FLAGS --no-undefined -Wno-invalid-noreturn -fPIC -fms-extensions -DHOST_64BIT -DBIT64 -DPAL_STDCPP_COMPAT -DPLATFORM_UNIX -std=c++17"
-INCLUDES="-I /mnt/c/Bakalarka/Profiler/PerunProfiler/CoreClr/pal/inc/rt -I /mnt/c/Bakalarka/Profiler/PerunProfiler/CoreClr/pal/prebuilt/inc -I /mnt/c/Bakalarka/Profiler/PerunProfiler/CoreClr/pal/inc -I /mnt/c/Bakalarka/Profiler/PerunProfiler/CoreClr/inc"
+CXX_FLAGS="$CXX_FLAGS --no-undefined -Wno-invalid-noreturn -fPIC -fms-extensions -HOST_64BIT -BIT64 -UNICODE -PLATFORM_UNIX -PAL_STDCPP_COMPAT -DPLATFORM_UNIX -std=c++17"
+INCLUDES="-I ../coreclr/pal/inc/rt -I ../coreclr/pal/src/include -I ../coreclr/pal/prebuilt/inc -I ../coreclr/inc"
 
 clang++ -shared -o PerunNetProfilerLin.so $CXX_FLAGS $INCLUDES CoreProfilerFactory.cpp CoreProfiler.cpp DLLMain.cpp Mutex.cpp Logger.cpp OS.cpp
-
-printf 'Done.\n'

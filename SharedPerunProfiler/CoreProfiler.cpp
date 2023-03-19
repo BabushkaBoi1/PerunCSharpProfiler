@@ -65,7 +65,6 @@ UINT_PTR __stdcall Mapper2(FunctionID functionId, BOOL* pHookFunction)
 bool CoreProfiler::Mapper(FunctionID functionId)
 {
 	auto name = GetMethodName(functionId);
-	m_functionMap.insert(std::pair<FunctionID, std::string>(functionId, name));
 
 	ModuleID moduleId;
 	mdToken token;
@@ -91,8 +90,22 @@ bool CoreProfiler::Mapper(FunctionID functionId)
 		{
 			return false;
 		}
+		if (OS::UnicodeToAnsi(pszName).find("Internal") != string::npos)
+		{
+			return false;
+		}
 		delete[] pszName;
 	}
+
+	auto* functionInfo = new FunctionInfo();
+
+	functionInfo->funcId = functionId;
+	functionInfo->name = name;
+
+	std::map<int, FunctionInfo*> list;
+	list[OS::GetTid()] = (functionInfo);
+
+	m_functionMap.insert(std::pair<FunctionID, std::map<int, FunctionInfo*>>(functionId, list));
 	
 	return true;
 }
@@ -230,6 +243,16 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 
 HRESULT CoreProfiler::Shutdown() {
 	cout << "Profiler shutdown, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
+	for (auto map : m_functionMap)
+	{
+		for (auto function : map.second)
+		{
+			Logger::LOG(function.second->cpuTimeEnter, function.second->cpuTimeLeave, "Function leave %p; thread: 0x%d, name: %s", function.second->funcId, function.first, function.second->name.c_str());
+
+			function.second->cpuTimeEnter.clear();
+			function.second->cpuTimeLeave.clear();
+		}
+	}
 	m_functionMap.clear();
 	g_CoreProfiler = NULL;
 	
@@ -239,28 +262,49 @@ HRESULT CoreProfiler::Shutdown() {
 
 void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
-	std::map<FunctionID, std::string>::iterator iter = m_functionMap.find(functionID);
-	if (iter != m_functionMap.end())
+	if (!m_functionMap[functionID].empty())
 	{
-		Logger::LOG(OS::GetCpuTime(), "Function enter %p; name: %s", functionID, iter->second.c_str());
+		//auto tmp = m_functionMap[functionID];
+		//if (tmp[OS::GetTid()] != nullptr)
+		//{
+		//	tmp[OS::GetTid()]->cpuTimeEnter.push_back(OS::GetCpuTime());
+		//} else
+		//{
+		//	auto tmp2 = m_functionMap[functionID].begin();
+		//	auto* functionInfo = new FunctionInfo();
+
+		//	functionInfo->funcId = tmp2->first;
+		//	functionInfo->name = tmp2->second->name;
+		//	functionInfo->cpuTimeEnter.push_back(OS::GetCpuTime());
+
+		//	m_functionMap[functionID][OS::GetTid()] = functionInfo;
+		//}
+		
+		//Logger::LOG(OS::GetCpuTime(), "Function enter %p; name: %s", functionID, m_functionMap[functionID].c_str());
 	}
 }
 
 void CoreProfiler::Leave(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
-	std::map<FunctionID, std::string>::iterator iter = m_functionMap.find(functionID);
-	if (iter != m_functionMap.end())
+	if (!m_functionMap[functionID].empty())
 	{
-		Logger::LOG(OS::GetCpuTime(), "Function leave %p; name: %s", functionID, iter->second.c_str());
+		/*if (m_functionMap[functionID][OS::GetTid()] != nullptr) {
+			m_functionMap[functionID][OS::GetTid()]->cpuTimeLeave.push_back(OS::GetCpuTime());
+		}*/
+		//m_functionMap[functionID].pop_back();
+		//Logger::LOG(OS::GetCpuTime(), "Function leave %p; name: %s", tmp->funcId, tmp->name.c_str());
 	}
 }
 
 void CoreProfiler::TailCall(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
-	std::map<FunctionID, std::string>::iterator iter = m_functionMap.find(functionID);
-	if (iter != m_functionMap.end())
+	if (!m_functionMap[functionID].empty())
 	{
-		Logger::LOG(OS::GetCpuTime(), "Function tailcall %p; name: %s", functionID, iter->second.c_str());
+		/*if (m_functionMap[functionID][OS::GetTid()] != nullptr) {
+			m_functionMap[functionID][OS::GetTid()]->cpuTimeLeave.push_back(OS::GetCpuTime());
+		}*/
+		//m_functionMap[functionID].pop_back();
+		//Logger::LOG(OS::GetCpuTime(), "Function tailcall %p; name: %s", tmp->funcId, tmp->name.c_str());
 	}
 }
 
@@ -363,13 +407,13 @@ HRESULT CoreProfiler::JITInlining(FunctionID callerId, FunctionID calleeId, BOOL
 }
 
 HRESULT CoreProfiler::ThreadCreated(ThreadID threadId) {
-	Logger::LOG(OS::GetCpuTime(), "Thread created 0x%p", threadId);
+	//Logger::LOG(OS::GetCpuTime(), "Thread created 0x%p", threadId);
 
 	return S_OK;
 }
 
 HRESULT CoreProfiler::ThreadDestroyed(ThreadID threadId) {
-	Logger::LOG(OS::GetCpuTime(), "Thread destroyed 0x%p", threadId);
+	//Logger::LOG(OS::GetCpuTime(), "Thread destroyed 0x%p", threadId);
 
 	return S_OK;
 }
@@ -455,8 +499,8 @@ HRESULT CoreProfiler::ObjectAllocated(ObjectID objectId, ClassID classId) {
 	mdTypeDef type;
 	if (SUCCEEDED(_info->GetClassIDInfo(classId, &module, &type))) {
 		auto name = GetTypeName(type, module);
-		if (!name.empty())
-			Logger::LOG(OS::GetCpuTime(), "Allocated object 0x%p of type %s", objectId, name.c_str());
+		//if (!name.empty())
+			//Logger::LOG(OS::GetCpuTime(), "Allocated object 0x%p of type %s", objectId, name.c_str());
 	}
 	return S_OK;
 }
@@ -551,8 +595,8 @@ HRESULT CoreProfiler::ThreadNameChanged(ThreadID threadId, ULONG cchName, WCHAR*
 }
 
 HRESULT CoreProfiler::GarbageCollectionStarted(int cGenerations, BOOL* generationCollected, COR_PRF_GC_REASON reason) {
-	Logger::LOG(OS::GetCpuTime(), "GC started. Gen0=%s, Gen1=%s, Gen2=%s",
-		generationCollected[0] ? "Yes" : "No", generationCollected[1] ? "Yes" : "No", generationCollected[2] ? "Yes" : "No");
+	//Logger::LOG(OS::GetCpuTime(), "GC started. Gen0=%s, Gen1=%s, Gen2=%s",
+	//	generationCollected[0] ? "Yes" : "No", generationCollected[1] ? "Yes" : "No", generationCollected[2] ? "Yes" : "No");
 
 	return S_OK;
 }
@@ -562,7 +606,7 @@ HRESULT CoreProfiler::SurvivingReferences(ULONG cSurvivingObjectIDRanges, Object
 }
 
 HRESULT CoreProfiler::GarbageCollectionFinished() {
-	Logger::LOG(OS::GetCpuTime(), "GC finished.");
+	//Logger::LOG(OS::GetCpuTime(), "GC finished.");
 	return S_OK;
 }
 
