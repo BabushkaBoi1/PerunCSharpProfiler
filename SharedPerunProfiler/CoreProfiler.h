@@ -33,10 +33,9 @@ struct std::hash<ClassInfo> {
 
 typedef struct FunctionInfo {
 	int funcId;
-	int threadId;
 	std::string name;
 	std::list<double> cpuTimeEnter;
-	std::list<double> cpuTimeLeave;
+	std::list<double> wallTimeEnter;
 } FunctionInfo;
 
 std::string GetTypeName(mdTypeDef type, ModuleID module);
@@ -146,6 +145,8 @@ public:
 	bool Mapper(FunctionID functionID);
 
 private:
+
+
 	static HRESULT __stdcall StackSnapshotCB(
 		FunctionID funcId,
 		UINT_PTR ip,
