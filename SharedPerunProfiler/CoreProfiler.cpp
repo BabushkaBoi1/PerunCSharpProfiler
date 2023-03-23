@@ -6,49 +6,71 @@
 #include <iostream>
 using namespace std;
 
-CComPtr<ICorProfilerInfo8> _info;
-//Logger logger;
 
-EXTERN_C void _stdcall EnterStub(FunctionIDOrClientID functionId, COR_PRF_ELT_INFO eltInfo)
+CComPtr<ICorProfilerInfo8> _info;
+CoreProfiler* g_CoreProfiler = NULL;
+
+CoreProfiler::CoreProfiler()
+{
+	
+}
+
+EXTERN_C void __stdcall EnterStub(FunctionIDOrClientID functionId, COR_PRF_ELT_INFO eltInfo)
 {
 	if (functionId.functionID == 0)
 	{
 		return;
 	}
-	CoreProfiler::Enter(functionId.functionID, eltInfo);
+	if (g_CoreProfiler != NULL)
+	{
+		g_CoreProfiler->Enter(functionId.functionID, eltInfo);
+	}
 }
 
-EXTERN_C void _stdcall LeaveStub(FunctionID functionId, COR_PRF_ELT_INFO eltInfo)
+EXTERN_C void __stdcall LeaveStub(FunctionID functionId, COR_PRF_ELT_INFO eltInfo)
 {
 	if (functionId == 0)
 	{
 		return;
 	}
-	CoreProfiler::Leave(functionId, eltInfo);
+	if (g_CoreProfiler != NULL)
+	{
+		g_CoreProfiler->Leave(functionId, eltInfo);
+	}
 }
 
-EXTERN_C void _stdcall TailcallStub(FunctionID functionId, COR_PRF_ELT_INFO eltInfo)
+EXTERN_C void __stdcall TailcallStub(FunctionID functionId, COR_PRF_ELT_INFO eltInfo)
 {
 	if (functionId == 0)
 	{
 		return;
 	}
-	CoreProfiler::TailCall(functionId, eltInfo);
+	if (g_CoreProfiler != NULL)
+	{
+		g_CoreProfiler->TailCall(functionId, eltInfo);
+	}
 }
 
-void* clientData()
+
+UINT_PTR __stdcall Mapper2(FunctionID functionId, BOOL* pHookFunction)
 {
-	return *clientData;
+	bool trace = false;
+	if (g_CoreProfiler != NULL)
+	{
+		trace = g_CoreProfiler->Mapper(functionId);
+	}
+	return trace ? (UINT_PTR)functionId : 0;
 }
 
-UINT_PTR __stdcall Mapper2(FunctionID functionId, void* clientData, BOOL* pHookFunction)
+bool CoreProfiler::Mapper(FunctionID functionId)
 {
+	auto name = GetMethodName(functionId);
+
 	ModuleID moduleId;
 	mdToken token;
 	ClassID classId;
 	if (FAILED(_info->GetFunctionInfo(functionId, &classId, &moduleId, &token))) {
-		pHookFunction = nullptr;
-		return 0;
+		return false;
 	}
 
 	LPCBYTE loadAddress;
@@ -62,57 +84,72 @@ UINT_PTR __stdcall Mapper2(FunctionID functionId, void* clientData, BOOL* pHookF
 
 		if (OS::UnicodeToAnsi(pszName).find("System") != string::npos)
 		{
-			pHookFunction = nullptr;
-			return 0;
+			return false;
 		}
 		if (OS::UnicodeToAnsi(pszName).find("Microsoft") != string::npos)
 		{
-			pHookFunction = nullptr;
-			return 0;
+			return false;
+		}
+		if (OS::UnicodeToAnsi(pszName).find("Internal") != string::npos)
+		{
+			return false;
 		}
 		delete[] pszName;
 	}
-	return functionId;
+
+	auto* functionInfo = new FunctionInfo();
+
+	functionInfo->funcId = functionId;
+	functionInfo->name = name;
+
+	std::map<int, FunctionInfo*> list;
+	list[OS::GetTid()] = (functionInfo);
+
+	m_functionMap.insert(std::pair<FunctionID, std::map<int, FunctionInfo*>>(functionId, list));
+	
+	return true;
 }
+
+
 
 #ifdef _X86_
 #ifdef _WIN32
 void __declspec(naked) EnterNaked(FunctionIDOrClientID functionIDOrClientID, COR_PRF_ELT_INFO eltInfo)
-{
-	__asm
 	{
-		PUSH EAX
-		PUSH ECX
-		PUSH EDX
+		  __asm
+		  {
+			    PUSH EAX
+			    PUSH ECX
+			    PUSH EDX
 		PUSH[ESP + 16]
 		CALL EnterStub
 		POP EDX
 		POP ECX
 		POP EAX
 		RET 8
-	}
-}
+			  }
+			}
 
 void __declspec(naked) LeaveNaked(FunctionIDOrClientID functionIDOrClientID, COR_PRF_ELT_INFO eltInfo)
-{
-	__asm
 	{
-		PUSH EAX
-		PUSH ECX
-		PUSH EDX
+	 __asm
+		  {
+			PUSH EAX
+			PUSH ECX
+		    PUSH EDX
 		PUSH[ESP + 16]
 		CALL LeaveStub
 		POP EDX
 		POP ECX
 		POP EAX
 		RET 8
-	}
-}
+	  }
+		}
 
 void __declspec(naked) TailcallNaked(FunctionIDOrClientID functionIDOrClientID, COR_PRF_ELT_INFO eltInfo)
 {
-	__asm
-	{
+    __asm
+    {
 		PUSH EAX
 		PUSH ECX
 		PUSH EDX
@@ -123,7 +160,7 @@ void __declspec(naked) TailcallNaked(FunctionIDOrClientID functionIDOrClientID, 
 		POP EAX
 		RET 8
 	}
-}
+	}
 #endif
 #elif defined(_AMD64_)
 EXTERN_C void EnterNaked(FunctionIDOrClientID functionIDOrClientID, COR_PRF_ELT_INFO eltInfo);
@@ -166,60 +203,147 @@ ULONG __stdcall CoreProfiler::Release(void) {
 }
 
 HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
+	g_CoreProfiler = this;
+	std::cout << "Profiler initialize, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
 
-	cout << "Profiler initialize, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
+	Logger::LOGInSh("[{\"Profiler\":"
+			"{\"action\":\"initialize\","
+			"\"PID\":\"%d\","
+			"\"TID\":\"0x%p\","
+			"\"enterWALLt\":\"%f\","
+			"\"enterCPUt\":\"%f\"}},",
+			OS::GetPid(), OS::GetTid() , OS::GetWallTime(), OS::GetCpuTime());
 
 	pICorProfilerInfoUnk->QueryInterface(&_info);
 	assert(_info);
 
-	_info->SetEventMask(
-		COR_PRF_MONITOR_MODULE_LOADS |
-		COR_PRF_MONITOR_ASSEMBLY_LOADS |
-		COR_PRF_MONITOR_GC |
-		COR_PRF_MONITOR_CLASS_LOADS |
-		COR_PRF_MONITOR_THREADS |
-		COR_PRF_MONITOR_JIT_COMPILATION |
-		COR_PRF_MONITOR_ENTERLEAVE |
-		COR_PRF_ENABLE_FUNCTION_ARGS |
-		COR_PRF_ENABLE_FUNCTION_RETVAL |
-		COR_PRF_ENABLE_FRAME_INFO);
-	//|	COR_PRF_MONITOR_OBJECT_ALLOCATED | COR_PRF_ENABLE_OBJECT_ALLOCATED);
+	auto modeStr = stoi(OS::ReadEnvironmentVariable("PROFILER_MODE"));
 
+	if (modeStr == 0)
+	{
+		_info->SetEventMask(
+			COR_PRF_MONITOR_MODULE_LOADS |
+			COR_PRF_MONITOR_ASSEMBLY_LOADS |
+			COR_PRF_MONITOR_GC |
+			COR_PRF_MONITOR_CLASS_LOADS |
+			COR_PRF_MONITOR_THREADS |
+			COR_PRF_MONITOR_EXCEPTIONS |
+			COR_PRF_MONITOR_JIT_COMPILATION |	
+			COR_PRF_MONITOR_OBJECT_ALLOCATED | 
+			COR_PRF_ENABLE_OBJECT_ALLOCATED);
+	} else
+	{
+		_info->SetEventMask(
+			COR_PRF_MONITOR_THREADS |
+			COR_PRF_MONITOR_ENTERLEAVE |
+			COR_PRF_ENABLE_FUNCTION_ARGS |
+			COR_PRF_ENABLE_FUNCTION_RETVAL |
+			COR_PRF_ENABLE_FRAME_INFO);
+	}
+	
 	_info->SetEnterLeaveFunctionHooks3WithInfo(EnterNaked, LeaveNaked, TailcallNaked);
 
-	_info->SetFunctionIDMapper2(Mapper2, clientData);
+	_info->SetFunctionIDMapper(Mapper2);
 
 	return S_OK;
 }
 
 HRESULT CoreProfiler::Shutdown() {
 	cout << "Profiler shutdown, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
+	Logger::LOGInSh("{\"Profiler\":"
+		"{\"action\":\"shutdown\","
+		"\"PID\":\"%d\","
+		"\"TID\":\"0x%p\","
+		"\"enterWALLt\":\"%f\","
+		"\"enterCPUt\":\"%f\"}}]",
+		OS::GetPid(), OS::GetTid(), OS::GetWallTime(), OS::GetCpuTime());
 
+	for (auto map : m_functionMap)
+	{
+		for (auto &function : map.second)
+		{
+			function.second->cpuTimeEnter.clear();
+			function.second->wallTimeEnter.clear();
+		}
+	}
+
+	m_functionMap.clear();
+	g_CoreProfiler = NULL;
+	
 	return S_OK;
 }
 
 
-
 void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
-	auto name = GetMethodName(functionID);
-	cout << "Enter function:" << name << ", cpu time:" << OS::GetCpuTime() << ", wall time: " << OS::GetWallTime() << "; \n";
-	//logger.LogFunction(name, nullptr, 0, 0);
+	if (!m_functionMap[functionID].empty())
+	{
+		auto tmp = m_functionMap[functionID];
+		if (tmp[OS::GetTid()] != nullptr)
+		{
+			tmp[OS::GetTid()]->cpuTimeEnter.push_back(OS::GetCpuTime());
+			tmp[OS::GetTid()]->wallTimeEnter.push_back(OS::GetWallTime());
+		} else
+		{
+			auto tmp2 = m_functionMap[functionID].begin();
+			auto* functionInfo = new FunctionInfo();
+
+			functionInfo->funcId = tmp2->first;
+			functionInfo->name = tmp2->second->name;
+			functionInfo->cpuTimeEnter.push_back(OS::GetCpuTime());
+			functionInfo->wallTimeEnter.push_back(OS::GetWallTime());
+
+			m_functionMap[functionID][OS::GetTid()] = functionInfo;
+		}
+	}
 }
 
 void CoreProfiler::Leave(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
-	auto name = GetMethodName(functionID);
-	cout << "Leave function:" << name << ", cpu time:" << OS::GetCpuTime() << ", wall time: " << OS::GetWallTime() << "; \n";
-	//logger.LogFunction(name, nullptr, 0, 0);
+	if (!m_functionMap[functionID].empty())
+	{
+		auto* tmp = m_functionMap[functionID][OS::GetTid()];
+		if (tmp != nullptr) {
+
+			Logger::LOG("\"Function\":{"
+				"\"fID\":\"%p\","
+				"\"fName\":\"%s\","
+				"\"PID\":\"%d\","
+				"\"TID\":\"%d\","
+				"\"enterWALLt\":\"%f\","
+				"\"leaveWALLt\":\"%f\","
+				"\"enterCPUt\":\"%f\","
+				"\"leaveCPUt\":\"%f\"}",
+				tmp->funcId, tmp->name.c_str(), OS::GetPid(), OS::GetTid(), tmp->wallTimeEnter.back(), OS::GetWallTime(),
+				tmp->cpuTimeEnter.back(), OS::GetCpuTime());
+
+			tmp->cpuTimeEnter.pop_back();
+		}
+	}
 }
 
 void CoreProfiler::TailCall(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
-	auto name = GetMethodName(functionID);
-	cout << "Tailcall function:" << name << ", cpu time:" << OS::GetCpuTime() << ", wall time: " << OS::GetWallTime() << "; \n";
-}
+	if (!m_functionMap[functionID].empty())
+	{
+		auto* tmp = m_functionMap[functionID][OS::GetTid()];
+		if (tmp != nullptr) {
+			Logger::LOG("\"Function\":{"
+				"\"fID\":\"%p\","
+				"\"fName\":\"%s\","
+				"\"PID\":\"%d\","
+				"\"TID\":\"%d\","
+				"\"enterWALLt\":\"%f\","
+				"\"leaveWALLt\":\"%f\","
+				"\"enterCPUt\":\"%f\","
+				"\"leaveCPUt\":\"%f\"}",
+				tmp->funcId, tmp->name.c_str(), OS::GetPid(), OS::GetTid(), tmp->wallTimeEnter.back(), OS::GetWallTime(),
+				tmp->cpuTimeEnter.back(), OS::GetCpuTime());
 
+			tmp->cpuTimeEnter.pop_back();
+		}
+	}
+}
 
 HRESULT CoreProfiler::AppDomainCreationStarted(AppDomainID appDomainId) {
 	return S_OK;
@@ -319,13 +443,25 @@ HRESULT CoreProfiler::JITInlining(FunctionID callerId, FunctionID calleeId, BOOL
 }
 
 HRESULT CoreProfiler::ThreadCreated(ThreadID threadId) {
-	cout << "Thread with id: " << threadId << " was created \n";
+	Logger::LOG("\"Thread\":{"
+		"\"action\":\"created\","
+		"\"PID\":\"%d\","
+		"\"TID\":\"0x%p\","
+		"\"enterWALLt\":\"%f\","
+		"\"enterCPUt\":\"%f\"}",
+		OS::GetPid(), threadId, OS::GetWallTime(), OS::GetCpuTime());
 
 	return S_OK;
 }
 
 HRESULT CoreProfiler::ThreadDestroyed(ThreadID threadId) {
-	cout << "Thread with id: " << threadId << " was destroyed \n";
+	Logger::LOG("\"Thread\":{"
+		"\"action\":\"destroyed\","
+		"\"PID\":\"%d\","
+		"\"TID\":\"0x%p\","
+		"\"enterWALLt\":\"%f\","
+		"\"enterCPUt\":\"%f\"}",
+		OS::GetPid(), threadId, OS::GetWallTime(), OS::GetCpuTime());
 
 	return S_OK;
 }
@@ -407,10 +543,28 @@ HRESULT CoreProfiler::MovedReferences(ULONG cMovedObjectIDRanges, ObjectID* oldO
 }
 
 HRESULT CoreProfiler::ObjectAllocated(ObjectID objectId, ClassID classId) {
+	ModuleID module;
+	mdTypeDef type;
+	if (SUCCEEDED(_info->GetClassIDInfo(classId, &module, &type))) {
+		auto name = GetTypeName(type, module);
+
+		if (!name.empty())
+		{
+			Logger::LOG("\"ObjectAllocated\":{"
+				"\"PID\":\"%d\","
+				"\"TID\":\"0x%p\","
+				"\"objectId\":\"0x%p\","
+				"\"objectType\":\"%s\","
+				"\"enterWALLt\":\"%f\","
+				"\"enterCPUt\":\"%f\"}",
+				OS::GetPid(), OS::GetTid(), objectId, name.c_str(), OS::GetWallTime(), OS::GetCpuTime());
+		}
+	}
 	return S_OK;
 }
 
 HRESULT CoreProfiler::ObjectsAllocatedByClass(ULONG cClassCount, ClassID* classIds, ULONG* cObjects) {
+
 	return S_OK;
 }
 
@@ -499,6 +653,19 @@ HRESULT CoreProfiler::ThreadNameChanged(ThreadID threadId, ULONG cchName, WCHAR*
 }
 
 HRESULT CoreProfiler::GarbageCollectionStarted(int cGenerations, BOOL* generationCollected, COR_PRF_GC_REASON reason) {
+
+	Logger::LOG("\"GC\":{"
+		"\"action\":\"started\","
+		"\"PID\":\"%d\","
+		"\"TID\":\"0x%p\","
+		"\"Gen0\":\"0x%s\","
+		"\"Gen1\":\"0x%s\","
+		"\"Gen2\":\"0x%s\","
+		"\"enterWALLt\":\"%f\","
+		"\"enterCPUt\":\"%f\"}",
+		OS::GetPid(), OS::GetTid(), generationCollected[0] ? "Yes" : "No", generationCollected[1] ? "Yes" : "No",
+		generationCollected[2] ? "Yes" : "No", OS::GetWallTime(), OS::GetCpuTime());
+
 	return S_OK;
 }
 
@@ -507,6 +674,13 @@ HRESULT CoreProfiler::SurvivingReferences(ULONG cSurvivingObjectIDRanges, Object
 }
 
 HRESULT CoreProfiler::GarbageCollectionFinished() {
+	Logger::LOG("\"GC\":{"
+		"\"action\":\"finished\","
+		"\"PID\":\"%d\","
+		"\"TID\":\"0x%p\","
+		"\"enterWALLt\":\"%f\","
+		"\"enterCPUt\":\"%f\"}",
+		OS::GetPid(), OS::GetTid(), OS::GetWallTime(), OS::GetCpuTime());
 	return S_OK;
 }
 

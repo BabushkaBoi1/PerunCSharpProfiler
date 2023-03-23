@@ -8,6 +8,7 @@
 #include <map>
 #include <time.h>  
 #include "Logger.h"
+#include <list>
 
 
 #pragma region ClassInfo
@@ -30,15 +31,19 @@ struct std::hash<ClassInfo> {
 };
 #pragma endregion
 
-typedef struct Data {
+typedef struct FunctionInfo {
 	int funcId;
-} MyData;
+	std::string name;
+	std::list<double> cpuTimeEnter;
+	std::list<double> wallTimeEnter;
+} FunctionInfo;
 
 std::string GetTypeName(mdTypeDef type, ModuleID module);
 std::string GetMethodName(FunctionID function);
 
 class CoreProfiler : public ICorProfilerCallback8 {
 public:
+	CoreProfiler();
 	// Inherited via ICorProfilerCallback8
 	HRESULT __stdcall QueryInterface(REFIID riid, void** ppvObject) override;
 	ULONG __stdcall AddRef(void) override;
@@ -134,11 +139,14 @@ public:
 	HRESULT __stdcall ModuleInMemorySymbolsUpdated(ModuleID moduleId) override;
 	HRESULT __stdcall DynamicMethodJITCompilationStarted(FunctionID functionId, BOOL fIsSafeToBlock, LPCBYTE pILHeader, ULONG cbILHeader) override;
 	HRESULT __stdcall DynamicMethodJITCompilationFinished(FunctionID functionId, HRESULT hrStatus, BOOL fIsSafeToBlock) override;
-	static void Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo);
-	static void Leave(FunctionID functionID, COR_PRF_ELT_INFO eltInfo);
-	static void TailCall(FunctionID functionID, COR_PRF_ELT_INFO eltInfo);
+	void Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo);
+	void Leave(FunctionID functionID, COR_PRF_ELT_INFO eltInfo);
+	void TailCall(FunctionID functionID, COR_PRF_ELT_INFO eltInfo);
+	bool Mapper(FunctionID functionID);
 
 private:
+
+
 	static HRESULT __stdcall StackSnapshotCB(
 		FunctionID funcId,
 		UINT_PTR ip,
@@ -148,6 +156,7 @@ private:
 		void* clientData
 	);
 
+	std::map<FunctionID, std::map<int, FunctionInfo*>> m_functionMap;
 	std::atomic<unsigned> _refCount{ 1 };
 	std::map<ClassInfo, std::string> _types;
 
