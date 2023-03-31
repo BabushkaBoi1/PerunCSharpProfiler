@@ -547,17 +547,22 @@ HRESULT CoreProfiler::ObjectAllocated(ObjectID objectId, ClassID classId) {
 	mdTypeDef type;
 	if (SUCCEEDED(_info->GetClassIDInfo(classId, &module, &type))) {
 		auto name = GetTypeName(type, module);
+		ULONG pcSize;
 
-		if (!name.empty())
+		if (SUCCEEDED(_info->GetObjectSize(objectId, &pcSize)))
 		{
-			Logger::LOG("\"ObjectAllocated\":{"
-				"\"PID\":\"%d\","
-				"\"TID\":\"0x%p\","
-				"\"objectId\":\"0x%p\","
-				"\"objectType\":\"%s\","
-				"\"enterWALLt\":\"%f\","
-				"\"enterCPUt\":\"%f\"}",
-				OS::GetPid(), OS::GetTid(), objectId, name.c_str(), OS::GetWallTime(), OS::GetCpuTime());
+			if (!name.empty())
+			{
+				Logger::LOG("\"ObjectAllocated\":{"
+					"\"PID\":\"%d\","
+					"\"TID\":\"0x%p\","
+					"\"objectId\":\"0x%p\","
+					"\"objectSize\":\"%d\","
+					"\"objectType\":\"%s\","
+					"\"enterWALLt\":\"%f\","
+					"\"enterCPUt\":\"%f\"}",
+					OS::GetPid(), OS::GetTid(), objectId, pcSize, name.c_str(), OS::GetWallTime(), OS::GetCpuTime());
+			}
 		}
 	}
 	return S_OK;
