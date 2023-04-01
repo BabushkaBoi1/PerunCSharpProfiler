@@ -9,6 +9,7 @@
 #include <time.h>  
 #include "Logger.h"
 #include <list>
+#include "FunctionClass.h"
 
 
 #pragma region ClassInfo
@@ -34,8 +35,6 @@ struct std::hash<ClassInfo> {
 typedef struct FunctionInfo {
 	int funcId;
 	std::string name;
-	std::list<double> cpuTimeEnter;
-	std::list<double> wallTimeEnter;
 } FunctionInfo;
 
 std::string GetTypeName(mdTypeDef type, ModuleID module);
@@ -156,9 +155,9 @@ private:
 		void* clientData
 	);
 
-	std::map<FunctionID, std::map<int, FunctionInfo*>> m_functionMap;
+	std::map<FunctionID, FunctionInfo*> m_functionMap;
+	std::map<ThreadID, FunctionClass*> m_activeFunctionInThread;
 	std::atomic<unsigned> _refCount{ 1 };
 	std::map<ClassInfo, std::string> _types;
-
 };
 

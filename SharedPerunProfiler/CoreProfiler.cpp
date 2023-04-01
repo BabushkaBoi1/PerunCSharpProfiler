@@ -4,6 +4,11 @@
 #include "CoreProfiler.h"
 #include "OS.h"
 #include <iostream>
+
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+
 using namespace std;
 
 
@@ -102,10 +107,7 @@ bool CoreProfiler::Mapper(FunctionID functionId)
 	functionInfo->funcId = functionId;
 	functionInfo->name = name;
 
-	std::map<int, FunctionInfo*> list;
-	list[OS::GetTid()] = (functionInfo);
-
-	m_functionMap.insert(std::pair<FunctionID, std::map<int, FunctionInfo*>>(functionId, list));
+	m_functionMap.insert(std::pair<FunctionID, FunctionInfo*>(functionId, functionInfo));
 	
 	return true;
 }
@@ -250,6 +252,14 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 
 HRESULT CoreProfiler::Shutdown() {
 	cout << "Profiler shutdown, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
+	for (auto thread : m_activeFunctionInThread)
+	{
+		if (thread.second != nullptr)
+		{
+			thread.second->Serilaize();
+		}
+	}
+	
 	Logger::LOGInSh("{\"Profiler\":"
 		"{\"action\":\"shutdown\","
 		"\"PID\":\"%d\","
@@ -258,89 +268,85 @@ HRESULT CoreProfiler::Shutdown() {
 		"\"enterCPUt\":\"%f\"}}]",
 		OS::GetPid(), OS::GetTid(), OS::GetWallTime(), OS::GetCpuTime());
 
-	for (auto map : m_functionMap)
-	{
-		for (auto &function : map.second)
-		{
-			function.second->cpuTimeEnter.clear();
-			function.second->wallTimeEnter.clear();
-		}
-	}
-
 	m_functionMap.clear();
-	g_CoreProfiler = NULL;
-	
+	m_activeFunctionInThread.clear();
+
+	delete g_CoreProfiler;
+
+	_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_DEBUG);
+	_CrtDumpMemoryLeaks();
+
 	return S_OK;
 }
 
 
 void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
-	if (!m_functionMap[functionID].empty())
+	if (m_functionMap[functionID] != NULL)
 	{
-		auto tmp = m_functionMap[functionID];
-		if (tmp[OS::GetTid()] != nullptr)
+		auto functionInfo = m_functionMap[functionID];
+		int threadId = OS::GetTid();
+
+		auto function = new FunctionClass();
+		function->funcId = functionID;
+		function->name = functionInfo->name;
+		function->cpuTimeEnter = OS::GetCpuTime();
+		function->wallTimeEnter = OS::GetWallTime();
+
+		if(m_activeFunctionInThread[threadId] != nullptr)
 		{
-			tmp[OS::GetTid()]->cpuTimeEnter.push_back(OS::GetCpuTime());
-			tmp[OS::GetTid()]->wallTimeEnter.push_back(OS::GetWallTime());
+			auto prevFunction = m_activeFunctionInThread[threadId];
+			prevFunction->calledFunctions.push_back(function);
+
+			function->prevFunction = prevFunction;
+
+			m_activeFunctionInThread[threadId] = function;
 		} else
 		{
-			auto tmp2 = m_functionMap[functionID].begin();
-			auto* functionInfo = new FunctionInfo();
-
-			functionInfo->funcId = tmp2->first;
-			functionInfo->name = tmp2->second->name;
-			functionInfo->cpuTimeEnter.push_back(OS::GetCpuTime());
-			functionInfo->wallTimeEnter.push_back(OS::GetWallTime());
-
-			m_functionMap[functionID][OS::GetTid()] = functionInfo;
+			function->prevFunction = nullptr;
+			m_activeFunctionInThread[threadId] = function;
 		}
 	}
 }
 
 void CoreProfiler::Leave(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
-	if (!m_functionMap[functionID].empty())
+	int threadId = OS::GetTid();
+	if (m_activeFunctionInThread[threadId] != nullptr)
 	{
-		auto* tmp = m_functionMap[functionID][OS::GetTid()];
-		if (tmp != nullptr) {
+		auto activeFunction = m_activeFunctionInThread[threadId];
+		if (activeFunction->funcId != functionID)
+		{
+			// TODO: error 
+		}
 
-			Logger::LOG("\"Function\":{"
-				"\"fID\":\"%p\","
-				"\"fName\":\"%s\","
-				"\"PID\":\"%d\","
-				"\"TID\":\"%d\","
-				"\"enterWALLt\":\"%f\","
-				"\"leaveWALLt\":\"%f\","
-				"\"enterCPUt\":\"%f\","
-				"\"leaveCPUt\":\"%f\"}",
-				tmp->funcId, tmp->name.c_str(), OS::GetPid(), OS::GetTid(), tmp->wallTimeEnter.back(), OS::GetWallTime(),
-				tmp->cpuTimeEnter.back(), OS::GetCpuTime());
+		activeFunction->cpuTimeLeave = OS::GetCpuTime();
+		activeFunction->wallTimeLeave = OS::GetWallTime();
 
-			tmp->cpuTimeEnter.pop_back();
+		if (activeFunction->prevFunction != nullptr)
+		{
+			m_activeFunctionInThread[threadId] = activeFunction->prevFunction;
 		}
 	}
 }
 
 void CoreProfiler::TailCall(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
-	if (!m_functionMap[functionID].empty())
+	int threadId = OS::GetTid();
+	if (m_activeFunctionInThread[threadId] != nullptr)
 	{
-		auto* tmp = m_functionMap[functionID][OS::GetTid()];
-		if (tmp != nullptr) {
-			Logger::LOG("\"Function\":{"
-				"\"fID\":\"%p\","
-				"\"fName\":\"%s\","
-				"\"PID\":\"%d\","
-				"\"TID\":\"%d\","
-				"\"enterWALLt\":\"%f\","
-				"\"leaveWALLt\":\"%f\","
-				"\"enterCPUt\":\"%f\","
-				"\"leaveCPUt\":\"%f\"}",
-				tmp->funcId, tmp->name.c_str(), OS::GetPid(), OS::GetTid(), tmp->wallTimeEnter.back(), OS::GetWallTime(),
-				tmp->cpuTimeEnter.back(), OS::GetCpuTime());
+		auto activeFunction = m_activeFunctionInThread[threadId];
+		if (activeFunction->funcId != functionID)
+		{
+			// TODO: error 
+		}
 
-			tmp->cpuTimeEnter.pop_back();
+		activeFunction->cpuTimeLeave = OS::GetCpuTime();
+		activeFunction->wallTimeLeave = OS::GetWallTime();
+
+		if (activeFunction->prevFunction != nullptr)
+		{
+			m_activeFunctionInThread[threadId] = activeFunction->prevFunction;
 		}
 	}
 }
@@ -443,6 +449,8 @@ HRESULT CoreProfiler::JITInlining(FunctionID callerId, FunctionID calleeId, BOOL
 }
 
 HRESULT CoreProfiler::ThreadCreated(ThreadID threadId) {
+	m_activeFunctionInThread[threadId] = nullptr;
+
 	Logger::LOG("\"Thread\":{"
 		"\"action\":\"created\","
 		"\"PID\":\"%d\","
