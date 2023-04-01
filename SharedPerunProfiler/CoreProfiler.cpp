@@ -227,15 +227,14 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 	if (modeStr == 0)
 	{
 		_info->SetEventMask(
-			COR_PRF_MONITOR_MODULE_LOADS |
-			COR_PRF_MONITOR_ASSEMBLY_LOADS |
 			COR_PRF_MONITOR_GC |
-			COR_PRF_MONITOR_CLASS_LOADS |
 			COR_PRF_MONITOR_THREADS |
 			COR_PRF_MONITOR_EXCEPTIONS |
-			COR_PRF_MONITOR_JIT_COMPILATION |	
 			COR_PRF_MONITOR_OBJECT_ALLOCATED | 
-			COR_PRF_ENABLE_OBJECT_ALLOCATED);
+			COR_PRF_ENABLE_OBJECT_ALLOCATED |
+			COR_PRF_MONITOR_ENTERLEAVE |
+			COR_PRF_ENABLE_FRAME_INFO
+		);
 	} else
 	{
 		_info->SetEventMask(
@@ -562,6 +561,7 @@ HRESULT CoreProfiler::MovedReferences(ULONG cMovedObjectIDRanges, ObjectID* oldO
 HRESULT CoreProfiler::ObjectAllocated(ObjectID objectId, ClassID classId) {
 	ModuleID module;
 	mdTypeDef type;
+	int threadId = OS::GetTid();
 	if (SUCCEEDED(_info->GetClassIDInfo(classId, &module, &type))) {
 		auto name = GetTypeName(type, module);
 		ULONG pcSize;
@@ -570,15 +570,31 @@ HRESULT CoreProfiler::ObjectAllocated(ObjectID objectId, ClassID classId) {
 		{
 			if (!name.empty())
 			{
-				Logger::LOG("\"ObjectAllocated\":{"
-					"\"PID\":\"%d\","
-					"\"TID\":\"0x%p\","
-					"\"objectId\":\"0x%p\","
-					"\"objectSize\":\"%d\","
-					"\"objectType\":\"%s\","
-					"\"enterWALLt\":\"%f\","
-					"\"enterCPUt\":\"%f\"}",
-					OS::GetPid(), OS::GetTid(), objectId, pcSize, name.c_str(), OS::GetWallTime(), OS::GetCpuTime());
+				if (m_activeFunctionInThread[threadId] != nullptr)
+				{
+					FunctionID fncId = m_activeFunctionInThread[threadId]->funcId;
+					Logger::LOG("\"ObjectAllocated\":{"
+						"\"PID\":\"%d\","
+						"\"TID\":\"0x%p\","
+						"\"objectId\":\"0x%p\","
+						"\"objectSize\":\"%d\","
+						"\"objectType\":\"%s\","
+						"\"fnc\":\"%p\","
+						"\"wallT\":\"%f\","
+						"\"cpuT\":\"%f\"}",
+						OS::GetPid(), OS::GetTid(), objectId, pcSize, name.c_str(), fncId, OS::GetWallTime(), OS::GetCpuTime());
+				} else
+				{
+					Logger::LOG("\"ObjectAllocated\":{"
+						"\"PID\":\"%d\","
+						"\"TID\":\"0x%p\","
+						"\"objectId\":\"0x%p\","
+						"\"objectSize\":\"%d\","
+						"\"objectType\":\"%s\","
+						"\"wallT\":\"%f\","
+						"\"cpuT\":\"%f\"}",
+						OS::GetPid(), OS::GetTid(), objectId, pcSize, name.c_str(),  OS::GetWallTime(), OS::GetCpuTime());
+				}
 			}
 		}
 	}

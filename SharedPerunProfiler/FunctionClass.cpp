@@ -20,7 +20,7 @@ void FunctionClass::Serilaize()
 
 	if (!this->calledFunctions.empty())
 	{
-		Logger::LOGInSh("\"calledFunctions\":[");
+		Logger::LOGInSh(",\"calledFunctions\":[");
 
 		for (auto function : this->calledFunctions)
 		{
@@ -29,5 +29,8 @@ void FunctionClass::Serilaize()
 		}
 		calledFunctions.clear();
 		Logger::LOGInSh("]}},");
+	} else
+	{
+		Logger::LOGInSh("}},");
 	}
 }

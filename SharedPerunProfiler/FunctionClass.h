@@ -1,14 +1,18 @@
 #pragma once
+
 #include <string>
 #include <iostream>
 #include <list>
 #include <ObjectClass.h>
+#include "Common.h"
+#include <cor.h>
+#include <corprof.h>
 
 
 class FunctionClass {
 public:
 	FunctionClass *prevFunction;
-	int funcId;
+	FunctionID funcId;
 	std::string name;
 	int PID;
 	int TID;
