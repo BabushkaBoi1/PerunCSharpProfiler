@@ -89,14 +89,17 @@ bool CoreProfiler::Mapper(FunctionID functionId)
 
 		if (OS::UnicodeToAnsi(pszName).find("System") != string::npos)
 		{
+			delete[] pszName;
 			return false;
 		}
 		if (OS::UnicodeToAnsi(pszName).find("Microsoft") != string::npos)
 		{
+			delete[] pszName;
 			return false;
 		}
 		if (OS::UnicodeToAnsi(pszName).find("Internal") != string::npos)
 		{
+			delete[] pszName;
 			return false;
 		}
 		delete[] pszName;
@@ -257,6 +260,7 @@ HRESULT CoreProfiler::Shutdown() {
 		if (thread.second != nullptr)
 		{
 			thread.second->Serilaize();
+			delete thread.second;
 		}
 	}
 	
@@ -268,10 +272,15 @@ HRESULT CoreProfiler::Shutdown() {
 		"\"enterCPUt\":\"%f\"}}]",
 		OS::GetPid(), OS::GetTid(), OS::GetWallTime(), OS::GetCpuTime());
 
+	for (auto& entry : m_functionMap) {
+		delete entry.second;
+	}
+
 	m_functionMap.clear();
 	m_activeFunctionInThread.clear();
 
 	delete g_CoreProfiler;
+	_info.Release();
 
 	_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_DEBUG);
 	_CrtDumpMemoryLeaks();
