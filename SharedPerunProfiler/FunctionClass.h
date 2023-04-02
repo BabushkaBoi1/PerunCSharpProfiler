@@ -21,7 +21,6 @@ public:
 	double cpuTimeLeave;
 	double wallTimeLeave;
 	std::list<FunctionClass*> calledFunctions;
-	std::list<ObjectClass> objectsAllocated;
 
 	void Serilaize();
 };

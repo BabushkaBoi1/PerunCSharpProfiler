@@ -5,6 +5,7 @@
 #include "OS.h"
 #include <iostream>
 
+// to debug memory leaks
 #define _CRTDBG_MAP_ALLOC
 #include <stdlib.h>
 #include <crtdbg.h>
@@ -212,11 +213,11 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 	std::cout << "Profiler initialize, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
 
 	Logger::LOGInSh("[{\"Profiler\":"
-			"{\"action\":\"initialize\","
+			"{\"act\":\"initialize\","
 			"\"PID\":\"%d\","
 			"\"TID\":\"0x%p\","
-			"\"enterWALLt\":\"%f\","
-			"\"enterCPUt\":\"%f\"}},",
+			"\"eWALLt\":\"%f\","
+			"\"eCPUt\":\"%f\"}},",
 			OS::GetPid(), OS::GetTid() , OS::GetWallTime(), OS::GetCpuTime());
 
 	pICorProfilerInfoUnk->QueryInterface(&_info);
@@ -235,7 +236,7 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 			COR_PRF_MONITOR_ENTERLEAVE |
 			COR_PRF_ENABLE_FRAME_INFO
 		);
-	} else
+	} else if (modeStr == 1)
 	{
 		_info->SetEventMask(
 			COR_PRF_MONITOR_THREADS |
@@ -243,6 +244,14 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 			COR_PRF_ENABLE_FUNCTION_ARGS |
 			COR_PRF_ENABLE_FUNCTION_RETVAL |
 			COR_PRF_ENABLE_FRAME_INFO);
+	} else
+	{
+		_info->SetEventMask(
+			COR_PRF_MONITOR_GC |
+			COR_PRF_MONITOR_THREADS |
+			COR_PRF_MONITOR_EXCEPTIONS |
+			COR_PRF_MONITOR_OBJECT_ALLOCATED |
+			COR_PRF_ENABLE_OBJECT_ALLOCATED);
 	}
 	
 	_info->SetEnterLeaveFunctionHooks3WithInfo(EnterNaked, LeaveNaked, TailcallNaked);
@@ -260,27 +269,34 @@ HRESULT CoreProfiler::Shutdown() {
 		{
 			thread.second->Serilaize();
 			delete thread.second;
+			m_activeFunctionInThread[thread.first] = nullptr;
 		}
 	}
 	
-	Logger::LOGInSh("{\"Profiler\":"
-		"{\"action\":\"shutdown\","
+	Logger::LOGInSh(",{\"Profiler\":"
+		"{\"act\":\"shutdown\","
 		"\"PID\":\"%d\","
 		"\"TID\":\"0x%p\","
-		"\"enterWALLt\":\"%f\","
-		"\"enterCPUt\":\"%f\"}}]",
+		"\"eWALLt\":\"%f\","
+		"\"eCPUt\":\"%f\"}}]",
 		OS::GetPid(), OS::GetTid(), OS::GetWallTime(), OS::GetCpuTime());
 
 	for (auto& entry : m_functionMap) {
 		delete entry.second;
 	}
 
+	for (auto& object : m_objectsAlloc) {
+		delete object.second;
+	}
+
+	m_objectsAlloc.clear();
 	m_functionMap.clear();
 	m_activeFunctionInThread.clear();
 
-	delete g_CoreProfiler;
 	_info.Release();
+	delete g_CoreProfiler;
 
+	// debuging memory leaks
 	_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_DEBUG);
 	_CrtDumpMemoryLeaks();
 
@@ -290,7 +306,7 @@ HRESULT CoreProfiler::Shutdown() {
 
 void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
-	if (m_functionMap[functionID] != NULL)
+	if (m_functionMap[functionID] != nullptr)
 	{
 		auto functionInfo = m_functionMap[functionID];
 		int threadId = OS::GetTid();
@@ -298,6 +314,8 @@ void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 		auto function = new FunctionClass();
 		function->funcId = functionID;
 		function->name = functionInfo->name;
+		function->PID = OS::GetPid();
+		function->TID = OS::GetTid();
 		function->cpuTimeEnter = OS::GetCpuTime();
 		function->wallTimeEnter = OS::GetWallTime();
 
@@ -457,14 +475,12 @@ HRESULT CoreProfiler::JITInlining(FunctionID callerId, FunctionID calleeId, BOOL
 }
 
 HRESULT CoreProfiler::ThreadCreated(ThreadID threadId) {
-	m_activeFunctionInThread[threadId] = nullptr;
-
 	Logger::LOG("\"Thread\":{"
-		"\"action\":\"created\","
+		"\"act\":\"created\","
 		"\"PID\":\"%d\","
-		"\"TID\":\"0x%p\","
-		"\"enterWALLt\":\"%f\","
-		"\"enterCPUt\":\"%f\"}",
+		"\"TID\":\"%d\","
+		"\"eWALLt\":\"%f\","
+		"\"eCPUt\":\"%f\"}",
 		OS::GetPid(), threadId, OS::GetWallTime(), OS::GetCpuTime());
 
 	return S_OK;
@@ -474,9 +490,9 @@ HRESULT CoreProfiler::ThreadDestroyed(ThreadID threadId) {
 	Logger::LOG("\"Thread\":{"
 		"\"action\":\"destroyed\","
 		"\"PID\":\"%d\","
-		"\"TID\":\"0x%p\","
-		"\"enterWALLt\":\"%f\","
-		"\"enterCPUt\":\"%f\"}",
+		"\"TID\":\"%d\","
+		"\"eWALLt\":\"%f\","
+		"\"eCPUt\":\"%f\"}",
 		OS::GetPid(), threadId, OS::GetWallTime(), OS::GetCpuTime());
 
 	return S_OK;
@@ -555,6 +571,23 @@ HRESULT CoreProfiler::RuntimeThreadResumed(ThreadID threadId) {
 }
 
 HRESULT CoreProfiler::MovedReferences(ULONG cMovedObjectIDRanges, ObjectID* oldObjectIDRangeStart, ObjectID* newObjectIDRangeStart, ULONG* cObjectIDRangeLength) {
+	for (int i =0; i < cMovedObjectIDRanges; i++)
+	{
+		for (auto object : m_objectsAlloc)
+		{
+			if (oldObjectIDRangeStart[i] <= object.first < oldObjectIDRangeStart[i] + cObjectIDRangeLength[i])
+			{
+				auto newObjectID = newObjectIDRangeStart[i] + (object.first - oldObjectIDRangeStart[i]);
+
+				object.second->objectId = newObjectID;
+				m_objectsAlloc[newObjectID] = object.second;
+
+				delete object.second;
+				m_objectsAlloc.erase(object.first);
+			}
+		}
+	}
+
 	return S_OK;
 }
 
@@ -568,6 +601,14 @@ HRESULT CoreProfiler::ObjectAllocated(ObjectID objectId, ClassID classId) {
 
 		if (SUCCEEDED(_info->GetObjectSize(objectId, &pcSize)))
 		{
+			auto object = new ObjectClass();
+			object->cpuTimeAllocation = OS::GetCpuTime();
+			object->wallTimeAllocation = OS::GetWallTime();
+			object->objectId = objectId;
+			object->size = pcSize;
+
+			m_objectsAlloc[objectId] = object;
+
 			if (!name.empty())
 			{
 				if (m_activeFunctionInThread[threadId] != nullptr)
@@ -588,11 +629,11 @@ HRESULT CoreProfiler::ObjectAllocated(ObjectID objectId, ClassID classId) {
 					Logger::LOG("\"ObjectAllocated\":{"
 						"\"PID\":\"%d\","
 						"\"TID\":\"0x%p\","
-						"\"objectId\":\"0x%p\","
-						"\"objectSize\":\"%d\","
-						"\"objectType\":\"%s\","
-						"\"wallT\":\"%f\","
-						"\"cpuT\":\"%f\"}",
+						"\"objId\":\"0x%p\","
+						"\"objSize\":\"%d\","
+						"\"objType\":\"%s\","
+						"\"eWALLt\":\"%f\","
+						"\"eCPUt\":\"%f\"}",
 						OS::GetPid(), OS::GetTid(), objectId, pcSize, name.c_str(),  OS::GetWallTime(), OS::GetCpuTime());
 				}
 			}
@@ -699,8 +740,8 @@ HRESULT CoreProfiler::GarbageCollectionStarted(int cGenerations, BOOL* generatio
 		"\"Gen0\":\"0x%s\","
 		"\"Gen1\":\"0x%s\","
 		"\"Gen2\":\"0x%s\","
-		"\"enterWALLt\":\"%f\","
-		"\"enterCPUt\":\"%f\"}",
+		"\"eWALLt\":\"%f\","
+		"\"eCPUt\":\"%f\"}",
 		OS::GetPid(), OS::GetTid(), generationCollected[0] ? "Yes" : "No", generationCollected[1] ? "Yes" : "No",
 		generationCollected[2] ? "Yes" : "No", OS::GetWallTime(), OS::GetCpuTime());
 
@@ -708,6 +749,7 @@ HRESULT CoreProfiler::GarbageCollectionStarted(int cGenerations, BOOL* generatio
 }
 
 HRESULT CoreProfiler::SurvivingReferences(ULONG cSurvivingObjectIDRanges, ObjectID* objectIDRangeStart, ULONG* cObjectIDRangeLength) {
+
 	return S_OK;
 }
 
@@ -716,8 +758,8 @@ HRESULT CoreProfiler::GarbageCollectionFinished() {
 		"\"action\":\"finished\","
 		"\"PID\":\"%d\","
 		"\"TID\":\"0x%p\","
-		"\"enterWALLt\":\"%f\","
-		"\"enterCPUt\":\"%f\"}",
+		"\"lWALLt\":\"%f\","
+		"\"lCPUt\":\"%f\"}",
 		OS::GetPid(), OS::GetTid(), OS::GetWallTime(), OS::GetCpuTime());
 	return S_OK;
 }

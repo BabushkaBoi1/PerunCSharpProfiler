@@ -30,6 +30,7 @@
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)Logger.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)FunctionClass.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)ObjectClass.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Common">

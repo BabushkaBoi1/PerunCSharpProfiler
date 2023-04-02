@@ -29,26 +29,11 @@ void Logger::Term() {
 #endif
 
 void Logger::DoLog(const char* text) {
-	char time[48];
-	const auto now = ::time(nullptr);
-#ifdef _WINDOWS
-	tm lt;
-	localtime_s(&lt, &now);
-	auto plt = &lt;
-#else
-	auto plt = localtime(&now);
-#endif
-	timespec ts;
-	timespec_get(&ts, TIME_UTC);
-
-	strftime(time, sizeof(time), "%D %T", plt);
 
 	std::stringstream message;
 
-	message
-		<< "{\"timeLog\":\"" << time << "." << std::setw(6) << std::setfill('0') << (ts.tv_nsec / 1000) << "\","
-		<< text << "},"
-		<< std::endl;
+	message << "{"
+		<< text << "},";
 
 	auto smessage = message.str();
 	{
@@ -62,7 +47,7 @@ void Logger::DoInitLog(const char* text)
 	std::stringstream message;
 
 	message
-		<< text << std::endl;
+		<< text;
 
 	auto smessage = message.str();
 	{

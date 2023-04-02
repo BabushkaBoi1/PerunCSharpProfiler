@@ -144,8 +144,6 @@ public:
 	bool Mapper(FunctionID functionID);
 
 private:
-
-
 	static HRESULT __stdcall StackSnapshotCB(
 		FunctionID funcId,
 		UINT_PTR ip,
@@ -159,5 +157,6 @@ private:
 	std::map<ThreadID, FunctionClass*> m_activeFunctionInThread;
 	std::atomic<unsigned> _refCount{ 1 };
 	std::map<ClassInfo, std::string> _types;
+	std::map<ObjectID, ObjectClass*> m_objectsAlloc;
 };
 

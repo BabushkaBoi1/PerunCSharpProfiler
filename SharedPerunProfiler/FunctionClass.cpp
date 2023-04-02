@@ -8,29 +8,35 @@ void FunctionClass::Serilaize()
 {
 	Logger::LOGInSh("{\"Function\":{"
 		"\"fID\":\"%p\","
-		"\"fName\":\"%s\","
 		"\"PID\":\"%d\","
 		"\"TID\":\"%d\","
-		"\"enterWALLt\":\"%f\","
-		"\"leaveWALLt\":\"%f\","
-		"\"enterCPUt\":\"%f\","
-		"\"leaveCPUt\":\"%f\"",
-		this->funcId, this->name.c_str(), this->PID, this->TID, this->wallTimeEnter, this->wallTimeLeave,
+		"\"eWALLt\":\"%f\","
+		"\"lWALLt\":\"%f\","
+		"\"eCPUt\":\"%f\","
+		"\"lCPUt\":\"%f\"",
+		this->funcId, this->PID, this->TID, this->wallTimeEnter, this->wallTimeLeave,
 		this->cpuTimeEnter, this->cpuTimeLeave);
 
 	if (!this->calledFunctions.empty())
 	{
-		Logger::LOGInSh(",\"calledFunctions\":[");
+		Logger::LOGInSh(",\"cFns\":[");
 
+		//auto firstId = this->calledFunctions.front()->funcId;
 		for (auto function : this->calledFunctions)
 		{
+			
+			if (function != this->calledFunctions.front())
+			{
+				Logger::LOGInSh(",");
+			}
 			function->Serilaize();
 			delete function;
 		}
 		calledFunctions.clear();
-		Logger::LOGInSh("]}},");
-	} else
+		Logger::LOGInSh("]}}");
+	}
+	else
 	{
-		Logger::LOGInSh("}},");
+		Logger::LOGInSh("}}");
 	}
 }

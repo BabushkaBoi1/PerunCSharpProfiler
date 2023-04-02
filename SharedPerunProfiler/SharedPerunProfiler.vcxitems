@@ -30,6 +30,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)FunctionClass.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)Logger.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)Mutex.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)ObjectClass.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)OS.h" />
   </ItemGroup>
 </Project>
