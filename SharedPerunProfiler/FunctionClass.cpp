@@ -6,37 +6,45 @@
 
 void FunctionClass::Serilaize()
 {
-	Logger::LOGInSh("{\"Function\":{"
-		"\"fID\":\"%p\","
-		"\"PID\":\"%d\","
-		"\"TID\":\"%d\","
-		"\"eWALLt\":\"%f\","
-		"\"lWALLt\":\"%f\","
-		"\"eCPUt\":\"%f\","
-		"\"lCPUt\":\"%f\"",
-		this->funcId, this->PID, this->TID, this->wallTimeEnter, this->wallTimeLeave,
-		this->cpuTimeEnter, this->cpuTimeLeave);
+
+	if (this->prevFunction != nullptr)
+	{
+		Logger::LOGInSh("{\"Function\":{"
+			"\"fID\":\"%p\","
+			"\"TID\":\"%d\","
+			"\"fName\":\"%s\","
+			"\"eWALLt\":\"%f\","
+			"\"lWALLt\":\"%f\","
+			"\"eCPUt\":\"%f\","
+			"\"lCPUt\":\"%f\","
+			"\"rFn\":\"%d\","
+			"\"nOr\":\"%d\"}},",
+			this->funcId,this->TID, this->name.c_str(), this->wallTimeEnter, this->wallTimeLeave,
+			this->cpuTimeEnter, this->cpuTimeLeave, this->prevFunction->callOrderNumber, this->callOrderNumber);
+	} else
+	{
+		Logger::LOGInSh("{\"Function\":{"
+			"\"fID\":\"%p\","
+			"\"TID\":\"%d\","
+			"\"fName\":\"%s\","
+			"\"eWALLt\":\"%f\","
+			"\"lWALLt\":\"%f\","
+			"\"eCPUt\":\"%f\","
+			"\"lCPUt\":\"%f\","
+			"\"rFn\":\"\","
+			"\"nOr\":\"%d\"}},",
+			this->funcId, this->TID, this->name.c_str(), this->wallTimeEnter, this->wallTimeLeave,
+			this->cpuTimeEnter, this->cpuTimeLeave, this->callOrderNumber);
+	}
+
 
 	if (!this->calledFunctions.empty())
 	{
-		Logger::LOGInSh(",\"cFns\":[");
-
-		//auto firstId = this->calledFunctions.front()->funcId;
 		for (auto function : this->calledFunctions)
 		{
-			
-			if (function != this->calledFunctions.front())
-			{
-				Logger::LOGInSh(",");
-			}
 			function->Serilaize();
 			delete function;
 		}
 		calledFunctions.clear();
-		Logger::LOGInSh("]}}");
-	}
-	else
-	{
-		Logger::LOGInSh("}}");
 	}
 }

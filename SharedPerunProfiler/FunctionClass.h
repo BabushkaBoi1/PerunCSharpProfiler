@@ -20,6 +20,7 @@ public:
 	double wallTimeEnter;
 	double cpuTimeLeave;
 	double wallTimeLeave;
+	int callOrderNumber;
 	std::list<FunctionClass*> calledFunctions;
 
 	void Serilaize();

@@ -215,7 +215,7 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 	Logger::LOGInSh("[{\"Profiler\":"
 			"{\"act\":\"initialize\","
 			"\"PID\":\"%d\","
-			"\"TID\":\"0x%p\","
+			"\"TID\":\"%d\","
 			"\"eWALLt\":\"%f\","
 			"\"eCPUt\":\"%f\"}},",
 			OS::GetPid(), OS::GetTid() , OS::GetWallTime(), OS::GetCpuTime());
@@ -262,44 +262,45 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 }
 
 HRESULT CoreProfiler::Shutdown() {
-	cout << "Profiler shutdown, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
-	for (auto thread : m_activeFunctionInThread)
 	{
-		if (thread.second != nullptr)
+		AutoLock locker(_lock);
+
+		cout << "Profiler shutdown, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
+		for (auto thread : m_activeFunctionInThread)
 		{
-			thread.second->Serilaize();
-			delete thread.second;
-			m_activeFunctionInThread[thread.first] = nullptr;
+			if (thread.second != nullptr)
+			{
+				thread.second->Serilaize();
+				delete thread.second;
+				m_activeFunctionInThread[thread.first] = nullptr;
+			}
 		}
+
+		Logger::LOGInSh("{\"Profiler\":"
+			"{\"act\":\"shutdown\","
+			"\"PID\":\"%d\","
+			"\"TID\":\"%d\","
+			"\"eWALLt\":\"%f\","
+			"\"eCPUt\":\"%f\"}}]",
+			OS::GetPid(), OS::GetTid(), OS::GetWallTime(), OS::GetCpuTime());
+
+		for (auto& entry : m_functionMap) {
+			delete entry.second;
+		}
+
+		for (auto& object : m_objectsAlloc) {
+			delete object.second;
+		}
+
+		m_objectsAlloc.clear();
+		m_functionMap.clear();
+		m_activeFunctionInThread.clear();
 	}
-	
-	Logger::LOGInSh(",{\"Profiler\":"
-		"{\"act\":\"shutdown\","
-		"\"PID\":\"%d\","
-		"\"TID\":\"0x%p\","
-		"\"eWALLt\":\"%f\","
-		"\"eCPUt\":\"%f\"}}]",
-		OS::GetPid(), OS::GetTid(), OS::GetWallTime(), OS::GetCpuTime());
-
-	for (auto& entry : m_functionMap) {
-		delete entry.second;
-	}
-
-	for (auto& object : m_objectsAlloc) {
-		delete object.second;
-	}
-
-	m_objectsAlloc.clear();
-	m_functionMap.clear();
-	m_activeFunctionInThread.clear();
-
 	_info.Release();
-	delete g_CoreProfiler;
 
 	// debuging memory leaks
 	_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_DEBUG);
 	_CrtDumpMemoryLeaks();
-
 	return S_OK;
 }
 
@@ -318,6 +319,17 @@ void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 		function->TID = OS::GetTid();
 		function->cpuTimeEnter = OS::GetCpuTime();
 		function->wallTimeEnter = OS::GetWallTime();
+
+		auto tmp = m_callOrder.find(threadId);
+		if (tmp == m_callOrder.end())
+		{
+			m_callOrder[threadId] = 0;
+		} else
+		{
+			m_callOrder[threadId] += 1;
+		}
+
+		function->callOrderNumber = m_callOrder[threadId];
 
 		if(m_activeFunctionInThread[threadId] != nullptr)
 		{
@@ -571,9 +583,10 @@ HRESULT CoreProfiler::RuntimeThreadResumed(ThreadID threadId) {
 }
 
 HRESULT CoreProfiler::MovedReferences(ULONG cMovedObjectIDRanges, ObjectID* oldObjectIDRangeStart, ObjectID* newObjectIDRangeStart, ULONG* cObjectIDRangeLength) {
+	// TODO: crashing of profiler
 	for (int i =0; i < cMovedObjectIDRanges; i++)
 	{
-		for (auto object : m_objectsAlloc)
+		for (auto& object : m_objectsAlloc)
 		{
 			if (oldObjectIDRangeStart[i] <= object.first < oldObjectIDRangeStart[i] + cObjectIDRangeLength[i])
 			{
@@ -613,22 +626,22 @@ HRESULT CoreProfiler::ObjectAllocated(ObjectID objectId, ClassID classId) {
 			{
 				if (m_activeFunctionInThread[threadId] != nullptr)
 				{
-					FunctionID fncId = m_activeFunctionInThread[threadId]->funcId;
+					int callOrderNumber = m_activeFunctionInThread[threadId]->callOrderNumber;
 					Logger::LOG("\"ObjectAllocated\":{"
 						"\"PID\":\"%d\","
-						"\"TID\":\"0x%p\","
-						"\"objectId\":\"0x%p\","
-						"\"objectSize\":\"%d\","
-						"\"objectType\":\"%s\","
-						"\"fnc\":\"%p\","
-						"\"wallT\":\"%f\","
-						"\"cpuT\":\"%f\"}",
-						OS::GetPid(), OS::GetTid(), objectId, pcSize, name.c_str(), fncId, OS::GetWallTime(), OS::GetCpuTime());
+						"\"TID\":\"%d\","
+						"\"objId\":\"0x%p\","
+						"\"objSize\":\"%d\","
+						"\"objType\":\"%s\","
+						"\"fnc\":\"%d\","
+						"\"eWALLt\":\"%f\","
+						"\"eCPUt\":\"%f\"}",
+						OS::GetPid(), OS::GetTid(), objectId, pcSize, name.c_str(), callOrderNumber, OS::GetWallTime(), OS::GetCpuTime());
 				} else
 				{
 					Logger::LOG("\"ObjectAllocated\":{"
 						"\"PID\":\"%d\","
-						"\"TID\":\"0x%p\","
+						"\"TID\":\"%d\","
 						"\"objId\":\"0x%p\","
 						"\"objSize\":\"%d\","
 						"\"objType\":\"%s\","
@@ -736,7 +749,7 @@ HRESULT CoreProfiler::GarbageCollectionStarted(int cGenerations, BOOL* generatio
 	Logger::LOG("\"GC\":{"
 		"\"action\":\"started\","
 		"\"PID\":\"%d\","
-		"\"TID\":\"0x%p\","
+		"\"TID\":\"%d\","
 		"\"Gen0\":\"0x%s\","
 		"\"Gen1\":\"0x%s\","
 		"\"Gen2\":\"0x%s\","
@@ -749,6 +762,19 @@ HRESULT CoreProfiler::GarbageCollectionStarted(int cGenerations, BOOL* generatio
 }
 
 HRESULT CoreProfiler::SurvivingReferences(ULONG cSurvivingObjectIDRanges, ObjectID* objectIDRangeStart, ULONG* cObjectIDRangeLength) {
+	{
+		AutoLock locker(_lock);
+		for (int i = 0; i < cSurvivingObjectIDRanges; i++)
+		{
+			for (auto object : m_objectsAlloc)
+			{
+				if (objectIDRangeStart[i] <= object.first >= objectIDRangeStart[i] + cObjectIDRangeLength[i])
+				{
+					object.second->survived = true;
+				}
+			}
+		}
+	}
 
 	return S_OK;
 }
@@ -757,10 +783,41 @@ HRESULT CoreProfiler::GarbageCollectionFinished() {
 	Logger::LOG("\"GC\":{"
 		"\"action\":\"finished\","
 		"\"PID\":\"%d\","
-		"\"TID\":\"0x%p\","
+		"\"TID\":\"%d\","
 		"\"lWALLt\":\"%f\","
 		"\"lCPUt\":\"%f\"}",
 		OS::GetPid(), OS::GetTid(), OS::GetWallTime(), OS::GetCpuTime());
+
+	{
+		AutoLock locker(_lock);
+		list<ULONG> objectsToDelete;
+
+		for (auto object : m_objectsAlloc)
+		{
+			if (object.second->survived == false)
+			{
+				Logger::LOG("\"ObjectDeAllocated\":{"
+					"\"PID\":\"%d\","
+					"\"TID\":\"%d\","
+					"\"objId\":\"0x%p\","
+					"\"eWALLt\":\"%f\","
+					"\"eCPUt\":\"%f\"}",
+					OS::GetPid(), OS::GetTid(), object.first, OS::GetWallTime(), OS::GetCpuTime());
+				objectsToDelete.push_back(object.first);
+			} else
+			{
+				object.second->survived = false;
+				object.second->gc += 1;
+			}
+		}
+		// delete deallocated objects
+		for (auto object : objectsToDelete)
+		{
+			delete m_objectsAlloc[object];
+			m_objectsAlloc.erase(object);
+		}
+	}
+
 	return S_OK;
 }
 
