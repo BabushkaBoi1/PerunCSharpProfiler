@@ -1,15 +1,21 @@
 #pragma once
-#include <string>
-#include <list>
 
+#include <list>
+#include <string>
 #include "Common.h"
+#include <cor.h>
+#include <corprof.h>
 
 class ObjectClass {
 public:
-	int objectId;
+	ObjectID objectId;
+	ThreadID threadId;
 	ULONG size;
-	bool survived;
-	int gc;
+	std::string objectTypeName;
+	int gcNumber;
 	double cpuTimeAllocation;
 	double wallTimeAllocation;
+	int functionNumOrder = -1;
+
+	void Serialize();
 };

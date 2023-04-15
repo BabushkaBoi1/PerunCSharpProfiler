@@ -159,7 +159,7 @@ private:
 	std::atomic<unsigned> _refCount{ 1 };
 	std::map<ClassInfo, std::string> _types;
 	std::map<ObjectID, ObjectClass*> m_objectsAlloc;
-
+	int gcNumber = 1;
 
 	Mutex _lock;
 };

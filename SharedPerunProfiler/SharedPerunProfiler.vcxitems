@@ -20,6 +20,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)FunctionClass.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)Logger.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)Mutex.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)ObjectClass.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)OS.cpp" />
   </ItemGroup>
   <ItemGroup>

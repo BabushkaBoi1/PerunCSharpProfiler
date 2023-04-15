@@ -23,5 +23,5 @@ public:
 	int callOrderNumber;
 	std::list<FunctionClass*> calledFunctions;
 
-	void Serilaize();
+	void Serialize();
 };

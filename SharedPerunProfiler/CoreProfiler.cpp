@@ -270,10 +270,15 @@ HRESULT CoreProfiler::Shutdown() {
 		{
 			if (thread.second != nullptr)
 			{
-				thread.second->Serilaize();
+				thread.second->Serialize();
 				delete thread.second;
 				m_activeFunctionInThread[thread.first] = nullptr;
 			}
+		}
+
+		for (auto& object : m_objectsAlloc) {
+			object.second->Serialize();
+			delete object.second;
 		}
 
 		Logger::LOGInSh("{\"Profiler\":"
@@ -286,10 +291,6 @@ HRESULT CoreProfiler::Shutdown() {
 
 		for (auto& entry : m_functionMap) {
 			delete entry.second;
-		}
-
-		for (auto& object : m_objectsAlloc) {
-			delete object.second;
 		}
 
 		m_objectsAlloc.clear();
@@ -310,7 +311,8 @@ void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 	if (m_functionMap[functionID] != nullptr)
 	{
 		auto functionInfo = m_functionMap[functionID];
-		int threadId = OS::GetTid();
+		ThreadID threadId;
+		_info->GetCurrentThreadID(&threadId);
 
 		auto function = new FunctionClass();
 		function->funcId = functionID;
@@ -349,7 +351,8 @@ void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 
 void CoreProfiler::Leave(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
-	int threadId = OS::GetTid();
+	ThreadID threadId;
+	_info->GetCurrentThreadID(&threadId);
 	if (m_activeFunctionInThread[threadId] != nullptr)
 	{
 		auto activeFunction = m_activeFunctionInThread[threadId];
@@ -370,7 +373,8 @@ void CoreProfiler::Leave(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 
 void CoreProfiler::TailCall(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
-	int threadId = OS::GetTid();
+	ThreadID threadId;
+	_info->GetCurrentThreadID(&threadId);
 	if (m_activeFunctionInThread[threadId] != nullptr)
 	{
 		auto activeFunction = m_activeFunctionInThread[threadId];
@@ -583,73 +587,32 @@ HRESULT CoreProfiler::RuntimeThreadResumed(ThreadID threadId) {
 }
 
 HRESULT CoreProfiler::MovedReferences(ULONG cMovedObjectIDRanges, ObjectID* oldObjectIDRangeStart, ObjectID* newObjectIDRangeStart, ULONG* cObjectIDRangeLength) {
-	// TODO: crashing of profiler
-	for (int i =0; i < cMovedObjectIDRanges; i++)
-	{
-		for (auto& object : m_objectsAlloc)
-		{
-			if (oldObjectIDRangeStart[i] <= object.first < oldObjectIDRangeStart[i] + cObjectIDRangeLength[i])
-			{
-				auto newObjectID = newObjectIDRangeStart[i] + (object.first - oldObjectIDRangeStart[i]);
-
-				object.second->objectId = newObjectID;
-				m_objectsAlloc[newObjectID] = object.second;
-
-				delete object.second;
-				m_objectsAlloc.erase(object.first);
-			}
-		}
-	}
-
 	return S_OK;
 }
 
 HRESULT CoreProfiler::ObjectAllocated(ObjectID objectId, ClassID classId) {
 	ModuleID module;
 	mdTypeDef type;
-	int threadId = OS::GetTid();
+
 	if (SUCCEEDED(_info->GetClassIDInfo(classId, &module, &type))) {
 		auto name = GetTypeName(type, module);
 		ULONG pcSize;
 
 		if (SUCCEEDED(_info->GetObjectSize(objectId, &pcSize)))
 		{
+			ThreadID pThreadId;
+			_info->GetCurrentThreadID(&pThreadId);
+
 			auto object = new ObjectClass();
 			object->cpuTimeAllocation = OS::GetCpuTime();
 			object->wallTimeAllocation = OS::GetWallTime();
 			object->objectId = objectId;
 			object->size = pcSize;
+			object->threadId = pThreadId;
+			object->objectTypeName = name;
+			object->gcNumber = this->gcNumber;
 
 			m_objectsAlloc[objectId] = object;
-
-			if (!name.empty())
-			{
-				if (m_activeFunctionInThread[threadId] != nullptr)
-				{
-					int callOrderNumber = m_activeFunctionInThread[threadId]->callOrderNumber;
-					Logger::LOG("\"ObjectAllocated\":{"
-						"\"PID\":\"%d\","
-						"\"TID\":\"%d\","
-						"\"objId\":\"0x%p\","
-						"\"objSize\":\"%d\","
-						"\"objType\":\"%s\","
-						"\"fnc\":\"%d\","
-						"\"eWALLt\":\"%f\","
-						"\"eCPUt\":\"%f\"}",
-						OS::GetPid(), OS::GetTid(), objectId, pcSize, name.c_str(), callOrderNumber, OS::GetWallTime(), OS::GetCpuTime());
-				} else
-				{
-					Logger::LOG("\"ObjectAllocated\":{"
-						"\"PID\":\"%d\","
-						"\"TID\":\"%d\","
-						"\"objId\":\"0x%p\","
-						"\"objSize\":\"%d\","
-						"\"objType\":\"%s\","
-						"\"eWALLt\":\"%f\","
-						"\"eCPUt\":\"%f\"}",
-						OS::GetPid(), OS::GetTid(), objectId, pcSize, name.c_str(),  OS::GetWallTime(), OS::GetCpuTime());
-				}
-			}
 		}
 	}
 	return S_OK;
@@ -745,6 +708,8 @@ HRESULT CoreProfiler::ThreadNameChanged(ThreadID threadId, ULONG cchName, WCHAR*
 }
 
 HRESULT CoreProfiler::GarbageCollectionStarted(int cGenerations, BOOL* generationCollected, COR_PRF_GC_REASON reason) {
+	ThreadID threadId;
+	_info->GetCurrentThreadID(&threadId);
 
 	Logger::LOG("\"GC\":{"
 		"\"action\":\"started\","
@@ -755,8 +720,10 @@ HRESULT CoreProfiler::GarbageCollectionStarted(int cGenerations, BOOL* generatio
 		"\"Gen2\":\"0x%s\","
 		"\"eWALLt\":\"%f\","
 		"\"eCPUt\":\"%f\"}",
-		OS::GetPid(), OS::GetTid(), generationCollected[0] ? "Yes" : "No", generationCollected[1] ? "Yes" : "No",
+		OS::GetPid(), threadId, generationCollected[0] ? "Yes" : "No", generationCollected[1] ? "Yes" : "No",
 		generationCollected[2] ? "Yes" : "No", OS::GetWallTime(), OS::GetCpuTime());
+
+	this->gcNumber++;
 
 	return S_OK;
 }
@@ -770,51 +737,44 @@ HRESULT CoreProfiler::SurvivingReferences(ULONG cSurvivingObjectIDRanges, Object
 			{
 				if (objectIDRangeStart[i] <= object.first >= objectIDRangeStart[i] + cObjectIDRangeLength[i])
 				{
-					object.second->survived = true;
+					object.second->gcNumber = gcNumber;
 				}
 			}
 		}
 	}
-
 	return S_OK;
 }
 
 HRESULT CoreProfiler::GarbageCollectionFinished() {
+	ThreadID threadId;
+	_info->GetCurrentThreadID(&threadId);
+
 	Logger::LOG("\"GC\":{"
 		"\"action\":\"finished\","
 		"\"PID\":\"%d\","
 		"\"TID\":\"%d\","
 		"\"lWALLt\":\"%f\","
 		"\"lCPUt\":\"%f\"}",
-		OS::GetPid(), OS::GetTid(), OS::GetWallTime(), OS::GetCpuTime());
+		OS::GetPid(), threadId, OS::GetWallTime(), OS::GetCpuTime());
 
 	{
 		AutoLock locker(_lock);
-		list<ULONG> objectsToDelete;
+		list<ObjectID> objectsToDelete;
 
-		for (auto object : m_objectsAlloc)
+		for (auto& object : m_objectsAlloc)
 		{
-			if (object.second->survived == false)
+			if (object.second->gcNumber != gcNumber)
 			{
-				Logger::LOG("\"ObjectDeAllocated\":{"
-					"\"PID\":\"%d\","
-					"\"TID\":\"%d\","
-					"\"objId\":\"0x%p\","
-					"\"eWALLt\":\"%f\","
-					"\"eCPUt\":\"%f\"}",
-					OS::GetPid(), OS::GetTid(), object.first, OS::GetWallTime(), OS::GetCpuTime());
+				object.second->Serialize();
 				objectsToDelete.push_back(object.first);
-			} else
-			{
-				object.second->survived = false;
-				object.second->gc += 1;
-			}
+				delete object.second;
+			} 
 		}
+
 		// delete deallocated objects
-		for (auto object : objectsToDelete)
+		for (auto objectToDelete : objectsToDelete)
 		{
-			delete m_objectsAlloc[object];
-			m_objectsAlloc.erase(object);
+			m_objectsAlloc.erase(objectToDelete);
 		}
 	}
 
@@ -866,10 +826,32 @@ HRESULT CoreProfiler::ReJITError(ModuleID moduleId, mdMethodDef methodId, Functi
 }
 
 HRESULT CoreProfiler::MovedReferences2(ULONG cMovedObjectIDRanges, ObjectID* oldObjectIDRangeStart, ObjectID* newObjectIDRangeStart, SIZE_T* cObjectIDRangeLength) {
+	{
+		AutoLock locker(_lock);
+		for (int i = 0; i < cMovedObjectIDRanges; i++)
+		{
+			for (auto object : m_objectsAlloc)
+			{
+				if (oldObjectIDRangeStart[i] <= object.first >= newObjectIDRangeStart[i] + cObjectIDRangeLength[i])
+				{
+					auto newObjectID = newObjectIDRangeStart[i] + (object.first - oldObjectIDRangeStart[i]);
+
+					object.second->objectId = newObjectID;
+					m_objectsAlloc[newObjectID] = object.second;
+
+					delete object.second;
+					m_objectsAlloc.erase(object.first);
+				}
+			}
+		}
+	}
+
 	return S_OK;
 }
 
 HRESULT CoreProfiler::SurvivingReferences2(ULONG cSurvivingObjectIDRanges, ObjectID* objectIDRangeStart, SIZE_T* cObjectIDRangeLength) {
+
+
 	return S_OK;
 }
 

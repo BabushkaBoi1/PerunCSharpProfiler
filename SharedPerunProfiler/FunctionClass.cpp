@@ -4,7 +4,7 @@
 
 
 
-void FunctionClass::Serilaize()
+void FunctionClass::Serialize()
 {
 
 	if (this->prevFunction != nullptr)
@@ -42,7 +42,7 @@ void FunctionClass::Serilaize()
 	{
 		for (auto function : this->calledFunctions)
 		{
-			function->Serilaize();
+			function->Serialize();
 			delete function;
 		}
 		calledFunctions.clear();

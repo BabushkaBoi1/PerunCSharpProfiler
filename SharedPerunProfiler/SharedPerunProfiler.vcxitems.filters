@@ -12,6 +12,7 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)Logger.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)FunctionClass.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)ObjectClass.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="$(MSBuildThisFileDirectory)CoreProfiler.h" />
