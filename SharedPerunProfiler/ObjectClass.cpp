@@ -6,7 +6,6 @@
 
 void ObjectClass::Serialize()
 {
-
 	if(this->functionNumOrder != -1)
 	{
 		Logger::LOG("\"ObjectAllocated\":{"

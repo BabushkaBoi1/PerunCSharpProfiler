@@ -228,6 +228,9 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 	if (modeStr == 0)
 	{
 		_info->SetEventMask(
+			COR_PRF_MONITOR_MODULE_LOADS |
+			COR_PRF_MONITOR_ASSEMBLY_LOADS |
+			COR_PRF_MONITOR_CLASS_LOADS |
 			COR_PRF_MONITOR_GC |
 			COR_PRF_MONITOR_THREADS |
 			COR_PRF_MONITOR_EXCEPTIONS |
@@ -247,6 +250,9 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 	} else
 	{
 		_info->SetEventMask(
+			COR_PRF_MONITOR_MODULE_LOADS |
+			COR_PRF_MONITOR_ASSEMBLY_LOADS |
+			COR_PRF_MONITOR_CLASS_LOADS |
 			COR_PRF_MONITOR_GC |
 			COR_PRF_MONITOR_THREADS |
 			COR_PRF_MONITOR_EXCEPTIONS |
@@ -447,6 +453,14 @@ HRESULT CoreProfiler::ModuleAttachedToAssembly(ModuleID moduleId, AssemblyID Ass
 }
 
 HRESULT CoreProfiler::ClassLoadStarted(ClassID classId) {
+	ModuleID module;
+	mdTypeDef type;
+
+	if (SUCCEEDED(_info->GetClassIDInfo(classId, &module, &type))) {
+		auto name = GetTypeName(type, module);
+		m_classes[classId] = name;
+	}
+
 	return S_OK;
 }
 
@@ -587,39 +601,53 @@ HRESULT CoreProfiler::RuntimeThreadResumed(ThreadID threadId) {
 }
 
 HRESULT CoreProfiler::MovedReferences(ULONG cMovedObjectIDRanges, ObjectID* oldObjectIDRangeStart, ObjectID* newObjectIDRangeStart, ULONG* cObjectIDRangeLength) {
-	return S_OK;
-}
-
-HRESULT CoreProfiler::ObjectAllocated(ObjectID objectId, ClassID classId) {
-	ModuleID module;
-	mdTypeDef type;
-
-	if (SUCCEEDED(_info->GetClassIDInfo(classId, &module, &type))) {
-		auto name = GetTypeName(type, module);
-		ULONG pcSize;
-
-		if (SUCCEEDED(_info->GetObjectSize(objectId, &pcSize)))
+	{
+		AutoLock locker(_lock);
+		for (int i = 0; i < cMovedObjectIDRanges; i++)
 		{
-			ThreadID pThreadId;
-			_info->GetCurrentThreadID(&pThreadId);
+			for (auto object : m_objectsAlloc)
+			{
+				if (oldObjectIDRangeStart[i] <= object.first >= newObjectIDRangeStart[i] + cObjectIDRangeLength[i])
+				{
+					auto newObjectID = newObjectIDRangeStart[i] + (object.first - oldObjectIDRangeStart[i]);
 
-			auto object = new ObjectClass();
-			object->cpuTimeAllocation = OS::GetCpuTime();
-			object->wallTimeAllocation = OS::GetWallTime();
-			object->objectId = objectId;
-			object->size = pcSize;
-			object->threadId = pThreadId;
-			object->objectTypeName = name;
-			object->gcNumber = this->gcNumber;
+					object.second->objectId = newObjectID;
+					m_objectsAlloc[newObjectID] = object.second;
 
-			m_objectsAlloc[objectId] = object;
+					delete object.second;
+					m_objectsAlloc.erase(object.first);
+				}
+			}
 		}
 	}
 	return S_OK;
 }
 
-HRESULT CoreProfiler::ObjectsAllocatedByClass(ULONG cClassCount, ClassID* classIds, ULONG* cObjects) {
+HRESULT CoreProfiler::ObjectAllocated(ObjectID objectId, ClassID classId) {
+	auto name = m_classes[classId];
+	ULONG pcSize;
 
+	if (SUCCEEDED(_info->GetObjectSize(objectId, &pcSize)))
+	{
+		ThreadID pThreadId;
+		_info->GetCurrentThreadID(&pThreadId);
+
+		auto object = new ObjectClass();
+		object->cpuTimeAllocation = OS::GetCpuTime();
+		object->wallTimeAllocation = OS::GetWallTime();
+		object->objectId = objectId;
+		object->size = pcSize;
+		object->threadId = pThreadId;
+		object->objectTypeName = name;
+		object->gcNumber = this->gcNumber;
+
+		m_objectsAlloc[objectId] = object;
+	}
+	
+	return S_OK;
+}
+
+HRESULT CoreProfiler::ObjectsAllocatedByClass(ULONG cClassCount, ClassID* classIds, ULONG* cObjects) {
 	return S_OK;
 }
 
@@ -826,32 +854,10 @@ HRESULT CoreProfiler::ReJITError(ModuleID moduleId, mdMethodDef methodId, Functi
 }
 
 HRESULT CoreProfiler::MovedReferences2(ULONG cMovedObjectIDRanges, ObjectID* oldObjectIDRangeStart, ObjectID* newObjectIDRangeStart, SIZE_T* cObjectIDRangeLength) {
-	{
-		AutoLock locker(_lock);
-		for (int i = 0; i < cMovedObjectIDRanges; i++)
-		{
-			for (auto object : m_objectsAlloc)
-			{
-				if (oldObjectIDRangeStart[i] <= object.first >= newObjectIDRangeStart[i] + cObjectIDRangeLength[i])
-				{
-					auto newObjectID = newObjectIDRangeStart[i] + (object.first - oldObjectIDRangeStart[i]);
-
-					object.second->objectId = newObjectID;
-					m_objectsAlloc[newObjectID] = object.second;
-
-					delete object.second;
-					m_objectsAlloc.erase(object.first);
-				}
-			}
-		}
-	}
-
 	return S_OK;
 }
 
 HRESULT CoreProfiler::SurvivingReferences2(ULONG cSurvivingObjectIDRanges, ObjectID* objectIDRangeStart, SIZE_T* cObjectIDRangeLength) {
-
-
 	return S_OK;
 }
 

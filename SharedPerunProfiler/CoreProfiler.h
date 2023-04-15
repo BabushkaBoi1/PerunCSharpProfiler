@@ -11,27 +11,6 @@
 #include <list>
 #include "FunctionClass.h"
 
-
-#pragma region ClassInfo
-struct ClassInfo {
-	ClassInfo(mdTypeDef type, ModuleID module) : Type(type), Module(module) {}
-
-	bool operator==(const ClassInfo& other) const {
-		return Type == other.Type && Module == other.Module;
-	}
-
-	mdTypeDef Type;
-	ModuleID Module;
-};
-
-template<>
-struct std::hash<ClassInfo> {
-	size_t operator()(const ClassInfo& ci) const {
-		return ci.Module ^ ci.Type;
-	}
-};
-#pragma endregion
-
 typedef struct FunctionInfo {
 	int funcId;
 	std::string name;
@@ -144,20 +123,11 @@ public:
 	bool Mapper(FunctionID functionID);
 
 private:
-	static HRESULT __stdcall StackSnapshotCB(
-		FunctionID funcId,
-		UINT_PTR ip,
-		COR_PRF_FRAME_INFO frameInfo,
-		ULONG32 contextSize,
-		BYTE context[],
-		void* clientData
-	);
-
 	std::map<FunctionID, FunctionInfo*> m_functionMap;
 	std::map<ThreadID, FunctionClass*> m_activeFunctionInThread;
 	std::map<ThreadID, int> m_callOrder;
 	std::atomic<unsigned> _refCount{ 1 };
-	std::map<ClassInfo, std::string> _types;
+	std::map<ClassID, std::string> m_classes;
 	std::map<ObjectID, ObjectClass*> m_objectsAlloc;
 	int gcNumber = 1;
 
