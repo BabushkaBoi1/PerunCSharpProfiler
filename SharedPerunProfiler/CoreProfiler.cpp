@@ -18,7 +18,12 @@ CoreProfiler* g_CoreProfiler = NULL;
 
 CoreProfiler::CoreProfiler()
 {
-	
+	int gcNumber = 1;
+}
+
+CoreProfiler::~CoreProfiler()
+{
+	int gcNumber = 0;
 }
 
 EXTERN_C void __stdcall EnterStub(FunctionIDOrClientID functionId, COR_PRF_ELT_INFO eltInfo)
@@ -272,7 +277,7 @@ HRESULT CoreProfiler::Shutdown() {
 		AutoLock locker(_lock);
 
 		cout << "Profiler shutdown, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
-		for (auto thread : m_activeFunctionInThread)
+		for (auto& thread : m_activeFunctionInThread)
 		{
 			if (thread.second != nullptr)
 			{
@@ -302,12 +307,12 @@ HRESULT CoreProfiler::Shutdown() {
 		m_objectsAlloc.clear();
 		m_functionMap.clear();
 		m_activeFunctionInThread.clear();
+		m_classes.clear();
 	}
 	_info.Release();
+	g_CoreProfiler = NULL;
+	
 
-	// debuging memory leaks
-	_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_DEBUG);
-	_CrtDumpMemoryLeaks();
 	return S_OK;
 }
 
@@ -458,7 +463,10 @@ HRESULT CoreProfiler::ClassLoadStarted(ClassID classId) {
 
 	if (SUCCEEDED(_info->GetClassIDInfo(classId, &module, &type))) {
 		auto name = GetTypeName(type, module);
-		m_classes[classId] = name;
+		if (name != "")
+		{
+			m_classes[classId] = name;
+		}
 	}
 
 	return S_OK;
@@ -601,25 +609,6 @@ HRESULT CoreProfiler::RuntimeThreadResumed(ThreadID threadId) {
 }
 
 HRESULT CoreProfiler::MovedReferences(ULONG cMovedObjectIDRanges, ObjectID* oldObjectIDRangeStart, ObjectID* newObjectIDRangeStart, ULONG* cObjectIDRangeLength) {
-	{
-		AutoLock locker(_lock);
-		for (int i = 0; i < cMovedObjectIDRanges; i++)
-		{
-			for (auto object : m_objectsAlloc)
-			{
-				if (oldObjectIDRangeStart[i] <= object.first >= newObjectIDRangeStart[i] + cObjectIDRangeLength[i])
-				{
-					auto newObjectID = newObjectIDRangeStart[i] + (object.first - oldObjectIDRangeStart[i]);
-
-					object.second->objectId = newObjectID;
-					m_objectsAlloc[newObjectID] = object.second;
-
-					delete object.second;
-					m_objectsAlloc.erase(object.first);
-				}
-			}
-		}
-	}
 	return S_OK;
 }
 
@@ -757,19 +746,6 @@ HRESULT CoreProfiler::GarbageCollectionStarted(int cGenerations, BOOL* generatio
 }
 
 HRESULT CoreProfiler::SurvivingReferences(ULONG cSurvivingObjectIDRanges, ObjectID* objectIDRangeStart, ULONG* cObjectIDRangeLength) {
-	{
-		AutoLock locker(_lock);
-		for (int i = 0; i < cSurvivingObjectIDRanges; i++)
-		{
-			for (auto object : m_objectsAlloc)
-			{
-				if (objectIDRangeStart[i] <= object.first >= objectIDRangeStart[i] + cObjectIDRangeLength[i])
-				{
-					object.second->gcNumber = gcNumber;
-				}
-			}
-		}
-	}
 	return S_OK;
 }
 
@@ -854,10 +830,38 @@ HRESULT CoreProfiler::ReJITError(ModuleID moduleId, mdMethodDef methodId, Functi
 }
 
 HRESULT CoreProfiler::MovedReferences2(ULONG cMovedObjectIDRanges, ObjectID* oldObjectIDRangeStart, ObjectID* newObjectIDRangeStart, SIZE_T* cObjectIDRangeLength) {
+	//{
+	//	AutoLock locker(_lock);
+	//	for (int i = 0; i < cMovedObjectIDRanges; i++)
+	//	{
+	//		for (auto object : m_objectsAlloc)
+	//		{
+	//			if (oldObjectIDRangeStart[i] <= object.second->objectId && object.second->objectId < newObjectIDRangeStart[i] + cObjectIDRangeLength[i])
+	//			{
+	//				auto newObjectID = newObjectIDRangeStart[i] + (object.first - oldObjectIDRangeStart[i]);
+	//				object.second->gcNumber = gcNumber;
+	//				object.second->objectId = newObjectID;
+	//			}
+	//		}
+	//	}
+	//}
 	return S_OK;
 }
 
 HRESULT CoreProfiler::SurvivingReferences2(ULONG cSurvivingObjectIDRanges, ObjectID* objectIDRangeStart, SIZE_T* cObjectIDRangeLength) {
+	{
+		AutoLock locker(_lock);
+		for (int i = 0; i < cSurvivingObjectIDRanges; i++)
+		{
+			for (auto object : m_objectsAlloc)
+			{
+				if (objectIDRangeStart[i] <= object.first >= objectIDRangeStart[i] + cObjectIDRangeLength[i])
+				{
+					object.second->gcNumber = gcNumber;
+				}
+			}
+		}
+	}
 	return S_OK;
 }
 

@@ -3,7 +3,6 @@
 #include "Logger.h"
 
 
-
 void ObjectClass::Serialize()
 {
 	if(this->functionNumOrder != -1)

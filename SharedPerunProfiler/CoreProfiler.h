@@ -22,6 +22,8 @@ std::string GetMethodName(FunctionID function);
 class CoreProfiler : public ICorProfilerCallback8 {
 public:
 	CoreProfiler();
+	~CoreProfiler();
+
 	// Inherited via ICorProfilerCallback8
 	HRESULT __stdcall QueryInterface(REFIID riid, void** ppvObject) override;
 	ULONG __stdcall AddRef(void) override;

@@ -6,7 +6,6 @@
 
 void FunctionClass::Serialize()
 {
-
 	if (this->prevFunction != nullptr)
 	{
 		Logger::LOGInSh("{\"Function\":{"
