@@ -830,21 +830,21 @@ HRESULT CoreProfiler::ReJITError(ModuleID moduleId, mdMethodDef methodId, Functi
 }
 
 HRESULT CoreProfiler::MovedReferences2(ULONG cMovedObjectIDRanges, ObjectID* oldObjectIDRangeStart, ObjectID* newObjectIDRangeStart, SIZE_T* cObjectIDRangeLength) {
-	//{
-	//	AutoLock locker(_lock);
-	//	for (int i = 0; i < cMovedObjectIDRanges; i++)
-	//	{
-	//		for (auto object : m_objectsAlloc)
-	//		{
-	//			if (oldObjectIDRangeStart[i] <= object.second->objectId && object.second->objectId < newObjectIDRangeStart[i] + cObjectIDRangeLength[i])
-	//			{
-	//				auto newObjectID = newObjectIDRangeStart[i] + (object.first - oldObjectIDRangeStart[i]);
-	//				object.second->gcNumber = gcNumber;
-	//				object.second->objectId = newObjectID;
-	//			}
-	//		}
-	//	}
-	//}
+	{
+		AutoLock locker(_lock);
+		for (int i = 0; i < cMovedObjectIDRanges; i++)
+		{
+			for (auto object : m_objectsAlloc)
+			{
+				if (oldObjectIDRangeStart[i] <= object.second->objectId && object.second->objectId < newObjectIDRangeStart[i] + cObjectIDRangeLength[i])
+				{
+					auto newObjectID = newObjectIDRangeStart[i] + (object.first - oldObjectIDRangeStart[i]);
+					object.second->gcNumber = gcNumber;
+					object.second->objectId = newObjectID;
+				}
+			}
+		}
+	}
 	return S_OK;
 }
 
