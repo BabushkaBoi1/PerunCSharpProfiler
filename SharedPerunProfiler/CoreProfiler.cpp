@@ -329,24 +329,15 @@ void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 		function->funcId = functionID;
 		function->name = functionInfo->name;
 		function->PID = OS::GetPid();
-		function->TID = OS::GetTid();
+		function->TID = threadId;
 		function->cpuTimeEnter = OS::GetCpuTime();
 		function->wallTimeEnter = OS::GetWallTime();
 
-		auto tmp = m_callOrder.find(threadId);
-		if (tmp == m_callOrder.end())
-		{
-			m_callOrder[threadId] = 0;
-		} else
-		{
-			m_callOrder[threadId] += 1;
-		}
-
-		function->callOrderNumber = m_callOrder[threadId];
-
 		if(m_activeFunctionInThread[threadId] != nullptr)
 		{
+			
 			auto prevFunction = m_activeFunctionInThread[threadId];
+			function->callOrderNumber = prevFunction->callOrderNumber + prevFunction->calledFunctions.size() + 1;
 			prevFunction->calledFunctions.push_back(function);
 
 			function->prevFunction = prevFunction;
@@ -354,6 +345,7 @@ void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 			m_activeFunctionInThread[threadId] = function;
 		} else
 		{
+			function->callOrderNumber = 0;
 			function->prevFunction = nullptr;
 			m_activeFunctionInThread[threadId] = function;
 		}
