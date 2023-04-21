@@ -4,6 +4,12 @@
 #include "CoreProfiler.h"
 #include "OS.h"
 #include <iostream>
+
+// to debug memory leaks
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+
 using namespace std;
 
 
@@ -12,7 +18,12 @@ CoreProfiler* g_CoreProfiler = NULL;
 
 CoreProfiler::CoreProfiler()
 {
-	
+	int gcNumber = 1;
+}
+
+CoreProfiler::~CoreProfiler()
+{
+	int gcNumber = 0;
 }
 
 EXTERN_C void __stdcall EnterStub(FunctionIDOrClientID functionId, COR_PRF_ELT_INFO eltInfo)
@@ -84,14 +95,17 @@ bool CoreProfiler::Mapper(FunctionID functionId)
 
 		if (OS::UnicodeToAnsi(pszName).find("System") != string::npos)
 		{
+			delete[] pszName;
 			return false;
 		}
 		if (OS::UnicodeToAnsi(pszName).find("Microsoft") != string::npos)
 		{
+			delete[] pszName;
 			return false;
 		}
 		if (OS::UnicodeToAnsi(pszName).find("Internal") != string::npos)
 		{
+			delete[] pszName;
 			return false;
 		}
 		delete[] pszName;
@@ -102,10 +116,7 @@ bool CoreProfiler::Mapper(FunctionID functionId)
 	functionInfo->funcId = functionId;
 	functionInfo->name = name;
 
-	std::map<int, FunctionInfo*> list;
-	list[OS::GetTid()] = (functionInfo);
-
-	m_functionMap.insert(std::pair<FunctionID, std::map<int, FunctionInfo*>>(functionId, list));
+	m_functionMap.insert(std::pair<FunctionID, FunctionInfo*>(functionId, functionInfo));
 	
 	return true;
 }
@@ -207,11 +218,11 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 	std::cout << "Profiler initialize, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
 
 	Logger::LOGInSh("[{\"Profiler\":"
-			"{\"action\":\"initialize\","
+			"{\"act\":\"initialize\","
 			"\"PID\":\"%d\","
-			"\"TID\":\"0x%p\","
-			"\"enterWALLt\":\"%f\","
-			"\"enterCPUt\":\"%f\"}},",
+			"\"TID\":\"%d\","
+			"\"eWALLt\":\"%f\","
+			"\"eCPUt\":\"%f\"}},",
 			OS::GetPid(), OS::GetTid() , OS::GetWallTime(), OS::GetCpuTime());
 
 	pICorProfilerInfoUnk->QueryInterface(&_info);
@@ -224,14 +235,16 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 		_info->SetEventMask(
 			COR_PRF_MONITOR_MODULE_LOADS |
 			COR_PRF_MONITOR_ASSEMBLY_LOADS |
-			COR_PRF_MONITOR_GC |
 			COR_PRF_MONITOR_CLASS_LOADS |
+			COR_PRF_MONITOR_GC |
 			COR_PRF_MONITOR_THREADS |
 			COR_PRF_MONITOR_EXCEPTIONS |
-			COR_PRF_MONITOR_JIT_COMPILATION |	
 			COR_PRF_MONITOR_OBJECT_ALLOCATED | 
-			COR_PRF_ENABLE_OBJECT_ALLOCATED);
-	} else
+			COR_PRF_ENABLE_OBJECT_ALLOCATED |
+			COR_PRF_MONITOR_ENTERLEAVE |
+			COR_PRF_ENABLE_FRAME_INFO
+		);
+	} else if (modeStr == 1)
 	{
 		_info->SetEventMask(
 			COR_PRF_MONITOR_THREADS |
@@ -239,6 +252,17 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 			COR_PRF_ENABLE_FUNCTION_ARGS |
 			COR_PRF_ENABLE_FUNCTION_RETVAL |
 			COR_PRF_ENABLE_FRAME_INFO);
+	} else
+	{
+		_info->SetEventMask(
+			COR_PRF_MONITOR_MODULE_LOADS |
+			COR_PRF_MONITOR_ASSEMBLY_LOADS |
+			COR_PRF_MONITOR_CLASS_LOADS |
+			COR_PRF_MONITOR_GC |
+			COR_PRF_MONITOR_THREADS |
+			COR_PRF_MONITOR_EXCEPTIONS |
+			COR_PRF_MONITOR_OBJECT_ALLOCATED |
+			COR_PRF_ENABLE_OBJECT_ALLOCATED);
 	}
 	
 	_info->SetEnterLeaveFunctionHooks3WithInfo(EnterNaked, LeaveNaked, TailcallNaked);
@@ -249,98 +273,133 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 }
 
 HRESULT CoreProfiler::Shutdown() {
-	cout << "Profiler shutdown, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
-	Logger::LOGInSh("{\"Profiler\":"
-		"{\"action\":\"shutdown\","
-		"\"PID\":\"%d\","
-		"\"TID\":\"0x%p\","
-		"\"enterWALLt\":\"%f\","
-		"\"enterCPUt\":\"%f\"}}]",
-		OS::GetPid(), OS::GetTid(), OS::GetWallTime(), OS::GetCpuTime());
-
-	for (auto map : m_functionMap)
 	{
-		for (auto &function : map.second)
-		{
-			function.second->cpuTimeEnter.clear();
-			function.second->wallTimeEnter.clear();
-		}
-	}
+		AutoLock locker(_lock);
 
-	m_functionMap.clear();
+		cout << "Profiler shutdown, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
+		for (auto& thread : m_activeFunctionInThread)
+		{
+			if (thread.second != nullptr)
+			{
+				thread.second->Serialize();
+				delete thread.second;
+				m_activeFunctionInThread[thread.first] = nullptr;
+			}
+		}
+
+		for (auto& object : m_objectsAlloc) {
+			object.second->Serialize();
+			delete object.second;
+		}
+
+		Logger::LOGInSh("{\"Profiler\":"
+			"{\"act\":\"shutdown\","
+			"\"PID\":\"%d\","
+			"\"TID\":\"%d\","
+			"\"eWALLt\":\"%f\","
+			"\"eCPUt\":\"%f\"}}]",
+			OS::GetPid(), OS::GetTid(), OS::GetWallTime(), OS::GetCpuTime());
+
+		for (auto& entry : m_functionMap) {
+			delete entry.second;
+		}
+
+		m_objectsAlloc.clear();
+		m_functionMap.clear();
+		m_activeFunctionInThread.clear();
+		m_classes.clear();
+	}
+	_info.Release();
 	g_CoreProfiler = NULL;
 	
+
 	return S_OK;
 }
 
 
 void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
-	if (!m_functionMap[functionID].empty())
+	if (m_functionMap[functionID] != nullptr)
 	{
-		auto tmp = m_functionMap[functionID];
-		if (tmp[OS::GetTid()] != nullptr)
+		auto functionInfo = m_functionMap[functionID];
+		ThreadID threadId;
+		_info->GetCurrentThreadID(&threadId);
+
+		auto function = new FunctionClass();
+		function->funcId = functionID;
+		function->name = functionInfo->name;
+		function->PID = OS::GetPid();
+		function->TID = OS::GetTid();
+		function->cpuTimeEnter = OS::GetCpuTime();
+		function->wallTimeEnter = OS::GetWallTime();
+
+		auto tmp = m_callOrder.find(threadId);
+		if (tmp == m_callOrder.end())
 		{
-			tmp[OS::GetTid()]->cpuTimeEnter.push_back(OS::GetCpuTime());
-			tmp[OS::GetTid()]->wallTimeEnter.push_back(OS::GetWallTime());
+			m_callOrder[threadId] = 0;
 		} else
 		{
-			auto tmp2 = m_functionMap[functionID].begin();
-			auto* functionInfo = new FunctionInfo();
+			m_callOrder[threadId] += 1;
+		}
 
-			functionInfo->funcId = tmp2->first;
-			functionInfo->name = tmp2->second->name;
-			functionInfo->cpuTimeEnter.push_back(OS::GetCpuTime());
-			functionInfo->wallTimeEnter.push_back(OS::GetWallTime());
+		function->callOrderNumber = m_callOrder[threadId];
 
-			m_functionMap[functionID][OS::GetTid()] = functionInfo;
+		if(m_activeFunctionInThread[threadId] != nullptr)
+		{
+			auto prevFunction = m_activeFunctionInThread[threadId];
+			prevFunction->calledFunctions.push_back(function);
+
+			function->prevFunction = prevFunction;
+
+			m_activeFunctionInThread[threadId] = function;
+		} else
+		{
+			function->prevFunction = nullptr;
+			m_activeFunctionInThread[threadId] = function;
 		}
 	}
 }
 
 void CoreProfiler::Leave(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
-	if (!m_functionMap[functionID].empty())
+	ThreadID threadId;
+	_info->GetCurrentThreadID(&threadId);
+	if (m_activeFunctionInThread[threadId] != nullptr)
 	{
-		auto* tmp = m_functionMap[functionID][OS::GetTid()];
-		if (tmp != nullptr) {
+		auto activeFunction = m_activeFunctionInThread[threadId];
+		if (activeFunction->funcId != functionID)
+		{
+			// TODO: error 
+		}
 
-			Logger::LOG("\"Function\":{"
-				"\"fID\":\"%p\","
-				"\"fName\":\"%s\","
-				"\"PID\":\"%d\","
-				"\"TID\":\"%d\","
-				"\"enterWALLt\":\"%f\","
-				"\"leaveWALLt\":\"%f\","
-				"\"enterCPUt\":\"%f\","
-				"\"leaveCPUt\":\"%f\"}",
-				tmp->funcId, tmp->name.c_str(), OS::GetPid(), OS::GetTid(), tmp->wallTimeEnter.back(), OS::GetWallTime(),
-				tmp->cpuTimeEnter.back(), OS::GetCpuTime());
+		activeFunction->cpuTimeLeave = OS::GetCpuTime();
+		activeFunction->wallTimeLeave = OS::GetWallTime();
 
-			tmp->cpuTimeEnter.pop_back();
+		if (activeFunction->prevFunction != nullptr)
+		{
+			m_activeFunctionInThread[threadId] = activeFunction->prevFunction;
 		}
 	}
 }
 
 void CoreProfiler::TailCall(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
-	if (!m_functionMap[functionID].empty())
+	ThreadID threadId;
+	_info->GetCurrentThreadID(&threadId);
+	if (m_activeFunctionInThread[threadId] != nullptr)
 	{
-		auto* tmp = m_functionMap[functionID][OS::GetTid()];
-		if (tmp != nullptr) {
-			Logger::LOG("\"Function\":{"
-				"\"fID\":\"%p\","
-				"\"fName\":\"%s\","
-				"\"PID\":\"%d\","
-				"\"TID\":\"%d\","
-				"\"enterWALLt\":\"%f\","
-				"\"leaveWALLt\":\"%f\","
-				"\"enterCPUt\":\"%f\","
-				"\"leaveCPUt\":\"%f\"}",
-				tmp->funcId, tmp->name.c_str(), OS::GetPid(), OS::GetTid(), tmp->wallTimeEnter.back(), OS::GetWallTime(),
-				tmp->cpuTimeEnter.back(), OS::GetCpuTime());
+		auto activeFunction = m_activeFunctionInThread[threadId];
+		if (activeFunction->funcId != functionID)
+		{
+			// TODO: error 
+		}
 
-			tmp->cpuTimeEnter.pop_back();
+		activeFunction->cpuTimeLeave = OS::GetCpuTime();
+		activeFunction->wallTimeLeave = OS::GetWallTime();
+
+		if (activeFunction->prevFunction != nullptr)
+		{
+			m_activeFunctionInThread[threadId] = activeFunction->prevFunction;
 		}
 	}
 }
@@ -399,6 +458,17 @@ HRESULT CoreProfiler::ModuleAttachedToAssembly(ModuleID moduleId, AssemblyID Ass
 }
 
 HRESULT CoreProfiler::ClassLoadStarted(ClassID classId) {
+	ModuleID module;
+	mdTypeDef type;
+
+	if (SUCCEEDED(_info->GetClassIDInfo(classId, &module, &type))) {
+		auto name = GetTypeName(type, module);
+		if (name != "")
+		{
+			m_classes[classId] = name;
+		}
+	}
+
 	return S_OK;
 }
 
@@ -444,11 +514,11 @@ HRESULT CoreProfiler::JITInlining(FunctionID callerId, FunctionID calleeId, BOOL
 
 HRESULT CoreProfiler::ThreadCreated(ThreadID threadId) {
 	Logger::LOG("\"Thread\":{"
-		"\"action\":\"created\","
+		"\"act\":\"created\","
 		"\"PID\":\"%d\","
-		"\"TID\":\"0x%p\","
-		"\"enterWALLt\":\"%f\","
-		"\"enterCPUt\":\"%f\"}",
+		"\"TID\":\"%d\","
+		"\"eWALLt\":\"%f\","
+		"\"eCPUt\":\"%f\"}",
 		OS::GetPid(), threadId, OS::GetWallTime(), OS::GetCpuTime());
 
 	return S_OK;
@@ -458,9 +528,9 @@ HRESULT CoreProfiler::ThreadDestroyed(ThreadID threadId) {
 	Logger::LOG("\"Thread\":{"
 		"\"action\":\"destroyed\","
 		"\"PID\":\"%d\","
-		"\"TID\":\"0x%p\","
-		"\"enterWALLt\":\"%f\","
-		"\"enterCPUt\":\"%f\"}",
+		"\"TID\":\"%d\","
+		"\"eWALLt\":\"%f\","
+		"\"eCPUt\":\"%f\"}",
 		OS::GetPid(), threadId, OS::GetWallTime(), OS::GetCpuTime());
 
 	return S_OK;
@@ -543,28 +613,30 @@ HRESULT CoreProfiler::MovedReferences(ULONG cMovedObjectIDRanges, ObjectID* oldO
 }
 
 HRESULT CoreProfiler::ObjectAllocated(ObjectID objectId, ClassID classId) {
-	ModuleID module;
-	mdTypeDef type;
-	if (SUCCEEDED(_info->GetClassIDInfo(classId, &module, &type))) {
-		auto name = GetTypeName(type, module);
+	auto name = m_classes[classId];
+	ULONG pcSize;
 
-		if (!name.empty())
-		{
-			Logger::LOG("\"ObjectAllocated\":{"
-				"\"PID\":\"%d\","
-				"\"TID\":\"0x%p\","
-				"\"objectId\":\"0x%p\","
-				"\"objectType\":\"%s\","
-				"\"enterWALLt\":\"%f\","
-				"\"enterCPUt\":\"%f\"}",
-				OS::GetPid(), OS::GetTid(), objectId, name.c_str(), OS::GetWallTime(), OS::GetCpuTime());
-		}
+	if (SUCCEEDED(_info->GetObjectSize(objectId, &pcSize)))
+	{
+		ThreadID pThreadId;
+		_info->GetCurrentThreadID(&pThreadId);
+
+		auto object = new ObjectClass();
+		object->cpuTimeAllocation = OS::GetCpuTime();
+		object->wallTimeAllocation = OS::GetWallTime();
+		object->objectId = objectId;
+		object->size = pcSize;
+		object->threadId = pThreadId;
+		object->objectTypeName = name;
+		object->gcNumber = this->gcNumber;
+
+		m_objectsAlloc[objectId] = object;
 	}
+	
 	return S_OK;
 }
 
 HRESULT CoreProfiler::ObjectsAllocatedByClass(ULONG cClassCount, ClassID* classIds, ULONG* cObjects) {
-
 	return S_OK;
 }
 
@@ -653,18 +725,22 @@ HRESULT CoreProfiler::ThreadNameChanged(ThreadID threadId, ULONG cchName, WCHAR*
 }
 
 HRESULT CoreProfiler::GarbageCollectionStarted(int cGenerations, BOOL* generationCollected, COR_PRF_GC_REASON reason) {
+	ThreadID threadId;
+	_info->GetCurrentThreadID(&threadId);
 
 	Logger::LOG("\"GC\":{"
 		"\"action\":\"started\","
 		"\"PID\":\"%d\","
-		"\"TID\":\"0x%p\","
+		"\"TID\":\"%d\","
 		"\"Gen0\":\"0x%s\","
 		"\"Gen1\":\"0x%s\","
 		"\"Gen2\":\"0x%s\","
-		"\"enterWALLt\":\"%f\","
-		"\"enterCPUt\":\"%f\"}",
-		OS::GetPid(), OS::GetTid(), generationCollected[0] ? "Yes" : "No", generationCollected[1] ? "Yes" : "No",
+		"\"eWALLt\":\"%f\","
+		"\"eCPUt\":\"%f\"}",
+		OS::GetPid(), threadId, generationCollected[0] ? "Yes" : "No", generationCollected[1] ? "Yes" : "No",
 		generationCollected[2] ? "Yes" : "No", OS::GetWallTime(), OS::GetCpuTime());
+
+	this->gcNumber++;
 
 	return S_OK;
 }
@@ -674,13 +750,38 @@ HRESULT CoreProfiler::SurvivingReferences(ULONG cSurvivingObjectIDRanges, Object
 }
 
 HRESULT CoreProfiler::GarbageCollectionFinished() {
+	ThreadID threadId;
+	_info->GetCurrentThreadID(&threadId);
+
 	Logger::LOG("\"GC\":{"
 		"\"action\":\"finished\","
 		"\"PID\":\"%d\","
-		"\"TID\":\"0x%p\","
-		"\"enterWALLt\":\"%f\","
-		"\"enterCPUt\":\"%f\"}",
-		OS::GetPid(), OS::GetTid(), OS::GetWallTime(), OS::GetCpuTime());
+		"\"TID\":\"%d\","
+		"\"lWALLt\":\"%f\","
+		"\"lCPUt\":\"%f\"}",
+		OS::GetPid(), threadId, OS::GetWallTime(), OS::GetCpuTime());
+
+	{
+		AutoLock locker(_lock);
+		list<ObjectID> objectsToDelete;
+
+		for (auto& object : m_objectsAlloc)
+		{
+			if (object.second->gcNumber != gcNumber)
+			{
+				object.second->Serialize();
+				objectsToDelete.push_back(object.first);
+				delete object.second;
+			} 
+		}
+
+		// delete deallocated objects
+		for (auto objectToDelete : objectsToDelete)
+		{
+			m_objectsAlloc.erase(objectToDelete);
+		}
+	}
+
 	return S_OK;
 }
 
@@ -729,10 +830,38 @@ HRESULT CoreProfiler::ReJITError(ModuleID moduleId, mdMethodDef methodId, Functi
 }
 
 HRESULT CoreProfiler::MovedReferences2(ULONG cMovedObjectIDRanges, ObjectID* oldObjectIDRangeStart, ObjectID* newObjectIDRangeStart, SIZE_T* cObjectIDRangeLength) {
+	{
+		AutoLock locker(_lock);
+		for (int i = 0; i < cMovedObjectIDRanges; i++)
+		{
+			for (auto object : m_objectsAlloc)
+			{
+				if (oldObjectIDRangeStart[i] <= object.second->objectId && object.second->objectId < newObjectIDRangeStart[i] + cObjectIDRangeLength[i])
+				{
+					auto newObjectID = newObjectIDRangeStart[i] + (object.first - oldObjectIDRangeStart[i]);
+					object.second->gcNumber = gcNumber;
+					object.second->objectId = newObjectID;
+				}
+			}
+		}
+	}
 	return S_OK;
 }
 
 HRESULT CoreProfiler::SurvivingReferences2(ULONG cSurvivingObjectIDRanges, ObjectID* objectIDRangeStart, SIZE_T* cObjectIDRangeLength) {
+	{
+		AutoLock locker(_lock);
+		for (int i = 0; i < cSurvivingObjectIDRanges; i++)
+		{
+			for (auto object : m_objectsAlloc)
+			{
+				if (objectIDRangeStart[i] <= object.first >= objectIDRangeStart[i] + cObjectIDRangeLength[i])
+				{
+					object.second->gcNumber = gcNumber;
+				}
+			}
+		}
+	}
 	return S_OK;
 }
 
