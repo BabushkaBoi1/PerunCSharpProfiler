@@ -18,6 +18,22 @@ CoreProfiler* g_CoreProfiler = NULL;
 
 CoreProfiler::CoreProfiler()
 {
+	auto allowedAssemblies = OS::ReadEnvironmentVariable("PROFILER_ENABLE_ASSEMBLIES");
+
+	if (allowedAssemblies != "")
+	{
+		size_t pos = 0;
+		std::string token;
+		while ((pos = allowedAssemblies.find(";")) != std::string::npos) {
+			token = allowedAssemblies.substr(0, pos);
+			listOfAllowedAssemblies.push_back(token);
+			allowedAssemblies.erase(0, pos + 1);
+		}
+
+		listOfAllowedAssemblies.push_back(allowedAssemblies);
+	}
+
+
 	int gcNumber = 1;
 }
 
@@ -93,21 +109,31 @@ bool CoreProfiler::Mapper(FunctionID functionId)
 		WCHAR* pszName = new WCHAR[nameLen];
 		_info->GetAssemblyInfo(assemblyId, nameLen, &nameLen, pszName, NULL, NULL);
 
-		if (OS::UnicodeToAnsi(pszName).find("System") != string::npos)
+		if (!listOfAllowedAssemblies.empty())
 		{
-			delete[] pszName;
-			return false;
-		}
-		if (OS::UnicodeToAnsi(pszName).find("Microsoft") != string::npos)
+			bool isInAllowedAssemblies = false;
+			for (auto allowedAssembly : listOfAllowedAssemblies)
+			{
+				if (OS::UnicodeToAnsi(pszName).find(allowedAssembly) != string::npos)
+				{
+					isInAllowedAssemblies = true;
+				}
+			}
+
+			if (!isInAllowedAssemblies)
+			{
+				delete[] pszName;
+				return false;
+			}
+		} else
 		{
-			delete[] pszName;
-			return false;
+			if (OS::UnicodeToAnsi(pszName).find("System") != string::npos || OS::UnicodeToAnsi(pszName).find("Internal") != string::npos)
+			{
+				delete[] pszName;
+				return false;
+			}
 		}
-		if (OS::UnicodeToAnsi(pszName).find("Internal") != string::npos)
-		{
-			delete[] pszName;
-			return false;
-		}
+		
 		delete[] pszName;
 	}
 
@@ -308,7 +334,9 @@ HRESULT CoreProfiler::Shutdown() {
 		m_functionMap.clear();
 		m_activeFunctionInThread.clear();
 		m_classes.clear();
+		listOfAllowedAssemblies.clear();
 	}
+	Logger::Shutdown();
 	_info.Release();
 	g_CoreProfiler = NULL;
 	
@@ -450,6 +478,10 @@ HRESULT CoreProfiler::ModuleAttachedToAssembly(ModuleID moduleId, AssemblyID Ass
 }
 
 HRESULT CoreProfiler::ClassLoadStarted(ClassID classId) {
+	return S_OK;
+}
+
+HRESULT CoreProfiler::ClassLoadFinished(ClassID classId, HRESULT hrStatus) {
 	ModuleID module;
 	mdTypeDef type;
 
@@ -461,10 +493,6 @@ HRESULT CoreProfiler::ClassLoadStarted(ClassID classId) {
 		}
 	}
 
-	return S_OK;
-}
-
-HRESULT CoreProfiler::ClassLoadFinished(ClassID classId, HRESULT hrStatus) {
 	return S_OK;
 }
 

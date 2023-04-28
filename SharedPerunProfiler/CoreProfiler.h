@@ -127,11 +127,11 @@ public:
 private:
 	std::map<FunctionID, FunctionInfo*> m_functionMap;
 	std::map<ThreadID, FunctionClass*> m_activeFunctionInThread;
-	//std::map<ThreadID, int> m_callOrder;
 	std::atomic<unsigned> _refCount{ 1 };
 	std::map<ClassID, std::string> m_classes;
 	std::map<ObjectID, ObjectClass*> m_objectsAlloc;
-	int gcNumber = 1;
+	std::list<std::string> listOfAllowedAssemblies;
+	int gcNumber;
 
 	Mutex _lock;
 };
