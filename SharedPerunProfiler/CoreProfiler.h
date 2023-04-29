@@ -13,11 +13,6 @@
 #include "FunctionInfo.h"
 #include "ObjectClass.h"
 
-//typedef struct FunctionInfo {
-//	int funcId;
-//	std::string name;
-//} FunctionInfo;
-
 std::string GetTypeName(mdTypeDef type, ModuleID module);
 std::string GetMethodName(FunctionID function);
 

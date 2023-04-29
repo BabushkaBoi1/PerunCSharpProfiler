@@ -7,8 +7,10 @@
 
 // to debug memory leaks
 #define _CRTDBG_MAP_ALLOC
+#include <chrono>
 #include <stdlib.h>
 #include <crtdbg.h>
+#include <thread>
 
 using namespace std;
 
@@ -296,15 +298,40 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 }
 
 HRESULT CoreProfiler::Shutdown() {
+	auto cpuTime = OS::GetCpuTime();
+	auto wallTime = OS::GetWallTime();
+
+	cout << "Profiler shutdown, cpu time:" << cpuTime << ", wall time:" << wallTime << ", pid: " << OS::GetPid() << "\n";
 	{
 		AutoLock locker(_lock);
-
-		cout << "Profiler shutdown, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
 
 		Logger::LOGInSh("\"functions\": [");
 		for (auto& thread : m_activeFunctionInThread)
 		{
 			auto& function = thread.second;
+			if (function.second == NULL)
+			{
+				break;
+			}
+
+			// TODO: some functions in the end of program dont get FunctionLeave callback, temporary solution is to give them time of shutdown callback
+			while(1)
+			{
+				if (function.second->cpuTimeLeave == NULL || function.second->wallTimeLeave == NULL)
+				{
+					function.second->cpuTimeLeave = cpuTime;
+					function.second->wallTimeLeave = wallTime;
+				}
+
+				// function needs to be at the top of tree
+				if (function.second->prevFunction == nullptr)
+				{
+					break;
+				}
+
+				function.second = function.second->prevFunction;
+			}
+
 			if (function.second != nullptr)
 			{
 				function.second->Serialize();
@@ -339,9 +366,7 @@ HRESULT CoreProfiler::Shutdown() {
 			"\"TID\":\"%d\","
 			"\"eWALLt\":\"%f\","
 			"\"eCPUt\":\"%f\"}}",
-			OS::GetPid(), OS::GetTid(), OS::GetWallTime(), OS::GetCpuTime());
-
-
+			OS::GetPid(), OS::GetTid(), wallTime, cpuTime);
 
 		m_objectsAlloc.clear();
 		m_functionMap.clear();
@@ -349,6 +374,7 @@ HRESULT CoreProfiler::Shutdown() {
 		m_classes.clear();
 		listOfAllowedAssemblies.clear();
 	}
+
 	Logger::Shutdown();
 	_info.Release();
 	g_CoreProfiler = NULL;
