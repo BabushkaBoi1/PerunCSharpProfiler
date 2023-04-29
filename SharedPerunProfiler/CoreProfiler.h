@@ -10,11 +10,13 @@
 #include "Logger.h"
 #include <list>
 #include "FunctionClass.h"
+#include "FunctionInfo.h"
+#include "ObjectClass.h"
 
-typedef struct FunctionInfo {
-	int funcId;
-	std::string name;
-} FunctionInfo;
+//typedef struct FunctionInfo {
+//	int funcId;
+//	std::string name;
+//} FunctionInfo;
 
 std::string GetTypeName(mdTypeDef type, ModuleID module);
 std::string GetMethodName(FunctionID function);
@@ -126,7 +128,8 @@ public:
 
 private:
 	std::map<FunctionID, FunctionInfo*> m_functionMap;
-	std::map<ThreadID, FunctionClass*> m_activeFunctionInThread;
+	std::map<ThreadID, std::pair<int, FunctionClass*>> m_activeFunctionInThread;
+	//std::map<ThreadID, int> m_orderNumberByThread;
 	std::atomic<unsigned> _refCount{ 1 };
 	std::map<ClassID, std::string> m_classes;
 	std::map<ObjectID, ObjectClass*> m_objectsAlloc;

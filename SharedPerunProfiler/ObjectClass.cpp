@@ -16,7 +16,7 @@ void ObjectClass::Serialize()
 			"\"fnc\":\"%d\","
 			"\"eWALLt\":\"%f\","
 			"\"eCPUt\":\"%f\"}",
-			this->threadId, this->objectId, this->size, this->objectTypeName.c_str(), this->gcNumber, this->functionNumOrder, this->wallTimeAllocation, this->cpuTimeAllocation);
+			this->threadId, this->objectId, this->size, this->typeName.c_str(), this->gcNumber, this->functionNumOrder, this->wallTimeAllocation, this->cpuTimeAllocation);
 	}
 	else
 	{
@@ -28,6 +28,6 @@ void ObjectClass::Serialize()
 			"\"untilGC\":\"%d\","
 			"\"eWALLt\":\"%f\","
 			"\"eCPUt\":\"%f\"}",
-			this->threadId, this->objectId, this->size, this->objectTypeName.c_str(), this->gcNumber, this->wallTimeAllocation, this->cpuTimeAllocation);
+			this->threadId, this->objectId, this->size, this->typeName.c_str(), this->gcNumber, this->wallTimeAllocation, this->cpuTimeAllocation);
 	}
 }

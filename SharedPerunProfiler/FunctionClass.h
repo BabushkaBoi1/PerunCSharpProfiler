@@ -3,7 +3,7 @@
 #include <string>
 #include <iostream>
 #include <list>
-#include <ObjectClass.h>
+#include "FunctionInfo.h"
 #include "Common.h"
 #include <cor.h>
 #include <corprof.h>
@@ -13,8 +13,7 @@ class FunctionClass {
 public:
 	FunctionClass *prevFunction;
 	FunctionID funcId;
-	std::string name;
-	int PID;
+	FunctionInfo *funcInfo;
 	int TID;
 	double cpuTimeEnter;
 	double wallTimeEnter;

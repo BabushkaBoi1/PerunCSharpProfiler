@@ -304,11 +304,12 @@ HRESULT CoreProfiler::Shutdown() {
 		Logger::LOGInSh("\"functions\": [");
 		for (auto& thread : m_activeFunctionInThread)
 		{
-			if (thread.second != nullptr)
+			auto& function = thread.second;
+			if (function.second != nullptr)
 			{
-				thread.second->Serialize();
-				delete thread.second;
-				m_activeFunctionInThread[thread.first] = nullptr;
+				function.second->Serialize();
+				delete function.second;
+				m_activeFunctionInThread[thread.first].second = nullptr;
 			}
 		}
 		Logger::LOGInSh("{}],");
@@ -325,6 +326,13 @@ HRESULT CoreProfiler::Shutdown() {
 		}
 		Logger::LOGInSh("{}],");
 
+		Logger::LOGInSh("\"functionNames\": {");
+		for (auto& entry : m_functionMap) {
+			entry.second->Serialize();
+			delete entry.second;
+		}
+		Logger::LOGInSh("\"\":\"\"},");
+
 		Logger::LOGInSh("\"ProfilerShutdown\":"
 			"{\"act\":\"shutdown\","
 			"\"PID\":\"%d\","
@@ -333,9 +341,7 @@ HRESULT CoreProfiler::Shutdown() {
 			"\"eCPUt\":\"%f\"}}",
 			OS::GetPid(), OS::GetTid(), OS::GetWallTime(), OS::GetCpuTime());
 
-		for (auto& entry : m_functionMap) {
-			delete entry.second;
-		}
+
 
 		m_objectsAlloc.clear();
 		m_functionMap.clear();
@@ -362,27 +368,27 @@ void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 
 		auto function = new FunctionClass();
 		function->funcId = functionID;
-		function->name = functionInfo->name;
-		function->PID = OS::GetPid();
+		function->funcInfo = functionInfo;
 		function->TID = threadId;
 		function->cpuTimeEnter = OS::GetCpuTime();
 		function->wallTimeEnter = OS::GetWallTime();
 
-		if(m_activeFunctionInThread[threadId] != nullptr)
+		if(m_activeFunctionInThread[threadId].second != nullptr)
 		{
-			
-			auto prevFunction = m_activeFunctionInThread[threadId];
-			function->callOrderNumber = prevFunction->callOrderNumber + prevFunction->calledFunctions.size() + 1;
-			prevFunction->calledFunctions.push_back(function);
+			auto prevFunction = m_activeFunctionInThread[threadId].second;
 
+			m_activeFunctionInThread[threadId].first += 1;
+			function->callOrderNumber = m_activeFunctionInThread[threadId].first;
+			prevFunction->calledFunctions.push_back(function);
 			function->prevFunction = prevFunction;
 
-			m_activeFunctionInThread[threadId] = function;
+			m_activeFunctionInThread[threadId].second = function;
 		} else
 		{
-			function->callOrderNumber = 0;
+			m_activeFunctionInThread[threadId].first = 0;
+			function->callOrderNumber = m_activeFunctionInThread[threadId].first;
 			function->prevFunction = nullptr;
-			m_activeFunctionInThread[threadId] = function;
+			m_activeFunctionInThread[threadId].second = function;
 		}
 	}
 }
@@ -391,9 +397,9 @@ void CoreProfiler::Leave(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
 	ThreadID threadId;
 	_info->GetCurrentThreadID(&threadId);
-	if (m_activeFunctionInThread[threadId] != nullptr)
+	if (m_activeFunctionInThread[threadId].second != nullptr)
 	{
-		auto activeFunction = m_activeFunctionInThread[threadId];
+		auto& activeFunction = m_activeFunctionInThread[threadId].second;
 		if (activeFunction->funcId != functionID)
 		{
 			// TODO: error 
@@ -404,7 +410,7 @@ void CoreProfiler::Leave(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 
 		if (activeFunction->prevFunction != nullptr)
 		{
-			m_activeFunctionInThread[threadId] = activeFunction->prevFunction;
+			m_activeFunctionInThread[threadId].second = activeFunction->prevFunction;
 		}
 	}
 }
@@ -413,9 +419,9 @@ void CoreProfiler::TailCall(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
 	ThreadID threadId;
 	_info->GetCurrentThreadID(&threadId);
-	if (m_activeFunctionInThread[threadId] != nullptr)
+	if (m_activeFunctionInThread[threadId].second != nullptr)
 	{
-		auto activeFunction = m_activeFunctionInThread[threadId];
+		auto& activeFunction = m_activeFunctionInThread[threadId].second;
 		if (activeFunction->funcId != functionID)
 		{
 			// TODO: error 
@@ -426,7 +432,7 @@ void CoreProfiler::TailCall(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 
 		if (activeFunction->prevFunction != nullptr)
 		{
-			m_activeFunctionInThread[threadId] = activeFunction->prevFunction;
+			m_activeFunctionInThread[threadId].second = activeFunction->prevFunction;
 		}
 	}
 }
@@ -654,8 +660,13 @@ HRESULT CoreProfiler::ObjectAllocated(ObjectID objectId, ClassID classId) {
 		object->objectId = objectId;
 		object->size = pcSize;
 		object->threadId = pThreadId;
-		object->objectTypeName = name;
+		object->typeName = name;
 		object->gcNumber = this->gcNumber;
+
+		if(m_activeFunctionInThread[pThreadId].second != nullptr)
+		{
+			object->functionNumOrder = m_activeFunctionInThread[pThreadId].first;
+		}
 
 		m_objectsAlloc[objectId] = object;
 	}
@@ -853,15 +864,25 @@ HRESULT CoreProfiler::ReJITError(ModuleID moduleId, mdMethodDef methodId, Functi
 HRESULT CoreProfiler::MovedReferences2(ULONG cMovedObjectIDRanges, ObjectID* oldObjectIDRangeStart, ObjectID* newObjectIDRangeStart, SIZE_T* cObjectIDRangeLength) {
 	{
 		AutoLock locker(_lock);
+
+
 		for (int i = 0; i < cMovedObjectIDRanges; i++)
 		{
+
 			for (auto object : m_objectsAlloc)
 			{
 				if (oldObjectIDRangeStart[i] <= object.second->objectId && object.second->objectId < newObjectIDRangeStart[i] + cObjectIDRangeLength[i])
 				{
+					
 					auto newObjectID = newObjectIDRangeStart[i] + (object.first - oldObjectIDRangeStart[i]);
 					object.second->gcNumber = gcNumber;
 					object.second->objectId = newObjectID;
+				}
+
+				// range is over, no point to continue iteration
+				if (object.second->objectId >= newObjectIDRangeStart[i] + cObjectIDRangeLength[i])
+				{
+					break;
 				}
 			}
 		}
@@ -876,9 +897,15 @@ HRESULT CoreProfiler::SurvivingReferences2(ULONG cSurvivingObjectIDRanges, Objec
 		{
 			for (auto object : m_objectsAlloc)
 			{
-				if (objectIDRangeStart[i] <= object.first >= objectIDRangeStart[i] + cObjectIDRangeLength[i])
+				if (objectIDRangeStart[i] <= object.second->objectId && object.second->objectId < objectIDRangeStart[i] + cObjectIDRangeLength[i])
 				{
 					object.second->gcNumber = gcNumber;
+				}
+
+				// range is over, no point to continue iteration
+				if (object.second->objectId >= objectIDRangeStart[i] + cObjectIDRangeLength[i])
+				{
+					break;
 				}
 			}
 		}

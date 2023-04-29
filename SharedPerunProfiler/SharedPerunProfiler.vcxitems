@@ -18,6 +18,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)CoreProfilerFactory.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)DLLMain.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)FunctionClass.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)FunctionInfo.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)Logger.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)Mutex.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)ObjectClass.cpp" />
@@ -29,6 +30,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)CoreProfilerFactory.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)Common.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)FunctionClass.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)FunctionInfo.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)Logger.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)Mutex.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)ObjectClass.h" />

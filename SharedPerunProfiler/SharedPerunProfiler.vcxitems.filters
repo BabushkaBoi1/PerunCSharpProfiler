@@ -13,6 +13,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)Logger.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)FunctionClass.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)ObjectClass.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)FunctionInfo.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="$(MSBuildThisFileDirectory)CoreProfiler.h" />
@@ -32,6 +33,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)Logger.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)FunctionClass.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)ObjectClass.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)FunctionInfo.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Common">

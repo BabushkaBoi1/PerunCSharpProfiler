@@ -11,7 +11,7 @@ public:
 	ObjectID objectId;
 	ThreadID threadId;
 	ULONG size;
-	std::string objectTypeName;
+	std::string typeName;
 	int gcNumber;
 	double cpuTimeAllocation;
 	double wallTimeAllocation;
