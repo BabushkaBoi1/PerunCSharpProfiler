@@ -32,9 +32,6 @@ CoreProfiler::CoreProfiler()
 
 		listOfAllowedAssemblies.push_back(allowedAssemblies);
 	}
-
-
-	int gcNumber = 1;
 }
 
 CoreProfiler::~CoreProfiler()
@@ -243,12 +240,12 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 	g_CoreProfiler = this;
 	std::cout << "Profiler initialize, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
 
-	Logger::LOGInSh("[{\"Profiler\":"
+	Logger::LOGInSh("{\"ProfilerInitialize\":"
 			"{\"act\":\"initialize\","
 			"\"PID\":\"%d\","
 			"\"TID\":\"%d\","
 			"\"eWALLt\":\"%f\","
-			"\"eCPUt\":\"%f\"}},",
+			"\"eCPUt\":\"%f\"},",
 			OS::GetPid(), OS::GetTid() , OS::GetWallTime(), OS::GetCpuTime());
 
 	pICorProfilerInfoUnk->QueryInterface(&_info);
@@ -303,6 +300,8 @@ HRESULT CoreProfiler::Shutdown() {
 		AutoLock locker(_lock);
 
 		cout << "Profiler shutdown, cpu time:" << OS::GetCpuTime() << ", wall time:" << OS::GetWallTime() << ", pid: " << OS::GetPid() << "\n";
+
+		Logger::LOGInSh("\"functions\": [");
 		for (auto& thread : m_activeFunctionInThread)
 		{
 			if (thread.second != nullptr)
@@ -312,18 +311,26 @@ HRESULT CoreProfiler::Shutdown() {
 				m_activeFunctionInThread[thread.first] = nullptr;
 			}
 		}
+		Logger::LOGInSh("{}],");
 
-		for (auto& object : m_objectsAlloc) {
-			object.second->Serialize();
-			delete object.second;
+		Logger::LOGInSh("\"Objects\": [");
+		for (auto& objectDeAlloc : m_objectsDeAlloc){
+			objectDeAlloc.second->Serialize();
+			delete objectDeAlloc.second;
 		}
 
-		Logger::LOGInSh("{\"Profiler\":"
+		for (auto& objectAlloc : m_objectsAlloc) {
+			objectAlloc.second->Serialize();
+			delete objectAlloc.second;
+		}
+		Logger::LOGInSh("{}],");
+
+		Logger::LOGInSh("\"ProfilerShutdown\":"
 			"{\"act\":\"shutdown\","
 			"\"PID\":\"%d\","
 			"\"TID\":\"%d\","
 			"\"eWALLt\":\"%f\","
-			"\"eCPUt\":\"%f\"}}]",
+			"\"eCPUt\":\"%f\"}}",
 			OS::GetPid(), OS::GetTid(), OS::GetWallTime(), OS::GetCpuTime());
 
 		for (auto& entry : m_functionMap) {
@@ -533,25 +540,25 @@ HRESULT CoreProfiler::JITInlining(FunctionID callerId, FunctionID calleeId, BOOL
 }
 
 HRESULT CoreProfiler::ThreadCreated(ThreadID threadId) {
-	Logger::LOG("\"Thread\":{"
-		"\"act\":\"created\","
-		"\"PID\":\"%d\","
-		"\"TID\":\"%d\","
-		"\"eWALLt\":\"%f\","
-		"\"eCPUt\":\"%f\"}",
-		OS::GetPid(), threadId, OS::GetWallTime(), OS::GetCpuTime());
+	//Logger::LOG("\"Thread\":{"
+	//	"\"act\":\"created\","
+	//	"\"PID\":\"%d\","
+	//	"\"TID\":\"%d\","
+	//	"\"eWALLt\":\"%f\","
+	//	"\"eCPUt\":\"%f\"}",
+	//	OS::GetPid(), threadId, OS::GetWallTime(), OS::GetCpuTime());
 
 	return S_OK;
 }
 
 HRESULT CoreProfiler::ThreadDestroyed(ThreadID threadId) {
-	Logger::LOG("\"Thread\":{"
-		"\"action\":\"destroyed\","
-		"\"PID\":\"%d\","
-		"\"TID\":\"%d\","
-		"\"eWALLt\":\"%f\","
-		"\"eCPUt\":\"%f\"}",
-		OS::GetPid(), threadId, OS::GetWallTime(), OS::GetCpuTime());
+	//Logger::LOG("\"Thread\":{"
+	//	"\"action\":\"destroyed\","
+	//	"\"PID\":\"%d\","
+	//	"\"TID\":\"%d\","
+	//	"\"eWALLt\":\"%f\","
+	//	"\"eCPUt\":\"%f\"}",
+	//	OS::GetPid(), threadId, OS::GetWallTime(), OS::GetCpuTime());
 
 	return S_OK;
 }
@@ -747,20 +754,17 @@ HRESULT CoreProfiler::ThreadNameChanged(ThreadID threadId, ULONG cchName, WCHAR*
 HRESULT CoreProfiler::GarbageCollectionStarted(int cGenerations, BOOL* generationCollected, COR_PRF_GC_REASON reason) {
 	ThreadID threadId;
 	_info->GetCurrentThreadID(&threadId);
+	this->gcNumber++;
 
-	Logger::LOG("\"GC\":{"
-		"\"action\":\"started\","
-		"\"PID\":\"%d\","
+	Logger::LOG("\"GCStarted%d\":{"
 		"\"TID\":\"%d\","
 		"\"Gen0\":\"0x%s\","
 		"\"Gen1\":\"0x%s\","
 		"\"Gen2\":\"0x%s\","
 		"\"eWALLt\":\"%f\","
 		"\"eCPUt\":\"%f\"}",
-		OS::GetPid(), threadId, generationCollected[0] ? "Yes" : "No", generationCollected[1] ? "Yes" : "No",
+		gcNumber, threadId, generationCollected[0] ? "Yes" : "No", generationCollected[1] ? "Yes" : "No",
 		generationCollected[2] ? "Yes" : "No", OS::GetWallTime(), OS::GetCpuTime());
-
-	this->gcNumber++;
 
 	return S_OK;
 }
@@ -773,13 +777,11 @@ HRESULT CoreProfiler::GarbageCollectionFinished() {
 	ThreadID threadId;
 	_info->GetCurrentThreadID(&threadId);
 
-	Logger::LOG("\"GC\":{"
-		"\"action\":\"finished\","
-		"\"PID\":\"%d\","
+	Logger::LOG("\"GCFinished%d\":{"
 		"\"TID\":\"%d\","
 		"\"lWALLt\":\"%f\","
 		"\"lCPUt\":\"%f\"}",
-		OS::GetPid(), threadId, OS::GetWallTime(), OS::GetCpuTime());
+		gcNumber, threadId, OS::GetWallTime(), OS::GetCpuTime());
 
 	{
 		AutoLock locker(_lock);
@@ -789,9 +791,8 @@ HRESULT CoreProfiler::GarbageCollectionFinished() {
 		{
 			if (object.second->gcNumber != gcNumber)
 			{
-				object.second->Serialize();
+				m_objectsDeAlloc[object.first] = object.second;
 				objectsToDelete.push_back(object.first);
-				delete object.second;
 			} 
 		}
 

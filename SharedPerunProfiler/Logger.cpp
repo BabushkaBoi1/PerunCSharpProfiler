@@ -32,8 +32,7 @@ void Logger::DoLog(const char* text) {
 
 	std::stringstream message;
 
-	message << "{"
-		<< text << "},";
+	message << text << ",";
 
 	auto smessage = message.str();
 	{

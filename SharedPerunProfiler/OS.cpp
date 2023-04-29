@@ -14,7 +14,11 @@
 std::string OS::ReadEnvironmentVariable(const char* name) {
 #ifdef _WINDOWS
 	char value[1024];
-	::GetEnvironmentVariableA(name, value, sizeof(value));
+	DWORD result = GetEnvironmentVariableA(name, value, sizeof(value));
+	if (result == 0)
+	{
+		return "";
+	}
 	return value;
 #else
 	return ::getenv(name);

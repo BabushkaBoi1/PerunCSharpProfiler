@@ -8,7 +8,7 @@ void FunctionClass::Serialize()
 {
 	if (this->prevFunction != nullptr)
 	{
-		Logger::LOGInSh("{\"Function\":{"
+		Logger::LOGInSh("{"
 			"\"fID\":\"%p\","
 			"\"TID\":\"%d\","
 			"\"fName\":\"%s\","
@@ -17,12 +17,12 @@ void FunctionClass::Serialize()
 			"\"eCPUt\":\"%f\","
 			"\"lCPUt\":\"%f\","
 			"\"rFn\":\"%d\","
-			"\"nOr\":\"%d\"}},",
+			"\"nOr\":\"%d\"},",
 			this->funcId,this->TID, this->name.c_str(), this->wallTimeEnter, this->wallTimeLeave,
 			this->cpuTimeEnter, this->cpuTimeLeave, this->prevFunction->callOrderNumber, this->callOrderNumber);
 	} else
 	{
-		Logger::LOGInSh("{\"Function\":{"
+		Logger::LOGInSh("{"
 			"\"fID\":\"%p\","
 			"\"TID\":\"%d\","
 			"\"fName\":\"%s\","
@@ -31,7 +31,7 @@ void FunctionClass::Serialize()
 			"\"eCPUt\":\"%f\","
 			"\"lCPUt\":\"%f\","
 			"\"rFn\":\"\","
-			"\"nOr\":\"%d\"}},",
+			"\"nOr\":\"%d\"},",
 			this->funcId, this->TID, this->name.c_str(), this->wallTimeEnter, this->wallTimeLeave,
 			this->cpuTimeEnter, this->cpuTimeLeave, this->callOrderNumber);
 	}

@@ -130,8 +130,9 @@ private:
 	std::atomic<unsigned> _refCount{ 1 };
 	std::map<ClassID, std::string> m_classes;
 	std::map<ObjectID, ObjectClass*> m_objectsAlloc;
+	std::map<ObjectID, ObjectClass*> m_objectsDeAlloc;
 	std::list<std::string> listOfAllowedAssemblies;
-	int gcNumber;
+	int gcNumber = 1;
 
 	Mutex _lock;
 };

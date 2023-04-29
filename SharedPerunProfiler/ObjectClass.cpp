@@ -7,7 +7,7 @@ void ObjectClass::Serialize()
 {
 	if(this->functionNumOrder != -1)
 	{
-		Logger::LOG("\"ObjectAllocated\":{"
+		Logger::LOG("{"
 			"\"TID\":\"%d\","
 			"\"objId\":\"0x%p\","
 			"\"objSize\":\"%d\","
@@ -20,7 +20,7 @@ void ObjectClass::Serialize()
 	}
 	else
 	{
-		Logger::LOG("\"ObjectAllocated\":{"
+		Logger::LOG("{"
 			"\"TID\":\"%d\","
 			"\"objId\":\"0x%p\","
 			"\"objSize\":\"%d\","
