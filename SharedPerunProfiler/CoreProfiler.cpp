@@ -21,6 +21,12 @@ CoreProfiler* g_CoreProfiler = NULL;
 CoreProfiler::CoreProfiler()
 {
 	auto allowedAssemblies = OS::ReadEnvironmentVariable("PROFILER_ENABLE_ASSEMBLIES");
+	auto deallocEnable = OS::ReadEnvironmentVariable("PROFILER_ENABLE_DEALLOC");
+
+	if (deallocEnable == "1")
+	{
+		this->isDeallocEnable = true;
+	}
 
 	if (allowedAssemblies != "")
 	{
@@ -288,7 +294,7 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 			COR_PRF_MONITOR_THREADS |
 			COR_PRF_MONITOR_OBJECT_ALLOCATED |
 			COR_PRF_ENABLE_OBJECT_ALLOCATED);
-	}
+	} 
 	
 	_info->SetEnterLeaveFunctionHooks3WithInfo(EnterNaked, LeaveNaked, TailcallNaked);
 
@@ -355,8 +361,11 @@ HRESULT CoreProfiler::Shutdown() {
 
 		Logger::LOGInSh("\"functionNames\": {");
 		for (auto& entry : m_functionMap) {
-			entry.second->Serialize();
-			delete entry.second;
+			if(entry.second != NULL)
+			{
+				entry.second->Serialize();
+				delete entry.second;
+			}
 		}
 		Logger::LOGInSh("\"\":\"\"},");
 
@@ -369,7 +378,10 @@ HRESULT CoreProfiler::Shutdown() {
 			OS::GetPid(), OS::GetTid(), wallTime, cpuTime);
 
 		m_objectsAlloc.clear();
-		m_functionMap.clear();
+		if (!m_functionMap.empty())
+		{
+			m_functionMap.clear();
+		}
 		m_activeFunctionInThread.clear();
 		m_classes.clear();
 		listOfAllowedAssemblies.clear();
@@ -405,6 +417,7 @@ void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 
 			m_activeFunctionInThread[threadId].first += 1;
 			function->callOrderNumber = m_activeFunctionInThread[threadId].first;
+			function->depth = prevFunction->depth + 1;
 			prevFunction->calledFunctions.push_back(function);
 			function->prevFunction = prevFunction;
 
@@ -413,6 +426,7 @@ void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 		{
 			m_activeFunctionInThread[threadId].first = 0;
 			function->callOrderNumber = m_activeFunctionInThread[threadId].first;
+			function->depth = 0;
 			function->prevFunction = nullptr;
 			m_activeFunctionInThread[threadId].second = function;
 		}
@@ -818,7 +832,7 @@ HRESULT CoreProfiler::GarbageCollectionStarted(int cGenerations, BOOL* generatio
 	this->gcNumber++;
 
 	Logger::LOG("\"GCStarted%d\":{"
-		"\"TID\":\"%d\","
+		"\"TID\":\"0%p\","
 		"\"Gen0\":\"0x%s\","
 		"\"Gen1\":\"0x%s\","
 		"\"Gen2\":\"0x%s\","
@@ -839,7 +853,7 @@ HRESULT CoreProfiler::GarbageCollectionFinished() {
 	_info->GetCurrentThreadID(&threadId);
 
 	Logger::LOG("\"GCFinished%d\":{"
-		"\"TID\":\"%d\","
+		"\"TID\":\"0%p\","
 		"\"lWALLt\":\"%f\","
 		"\"lCPUt\":\"%f\"}",
 		gcNumber, threadId, OS::GetWallTime(), OS::GetCpuTime());
@@ -912,6 +926,10 @@ HRESULT CoreProfiler::ReJITError(ModuleID moduleId, mdMethodDef methodId, Functi
 }
 
 HRESULT CoreProfiler::MovedReferences2(ULONG cMovedObjectIDRanges, ObjectID* oldObjectIDRangeStart, ObjectID* newObjectIDRangeStart, SIZE_T* cObjectIDRangeLength) {
+	if (!this->isDeallocEnable)
+	{
+		return S_OK;
+	}
 	{
 		AutoLock locker(_lock);
 
@@ -941,6 +959,10 @@ HRESULT CoreProfiler::MovedReferences2(ULONG cMovedObjectIDRanges, ObjectID* old
 }
 
 HRESULT CoreProfiler::SurvivingReferences2(ULONG cSurvivingObjectIDRanges, ObjectID* objectIDRangeStart, SIZE_T* cObjectIDRangeLength) {
+	if (!this->isDeallocEnable)
+	{
+		return S_OK;
+	}
 	{
 		AutoLock locker(_lock);
 		for (int i = 0; i < cSurvivingObjectIDRanges; i++)

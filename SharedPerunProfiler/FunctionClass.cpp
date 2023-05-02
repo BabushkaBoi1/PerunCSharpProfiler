@@ -15,10 +15,11 @@ void FunctionClass::Serialize()
 			"\"lWALLt\":\"%f\","
 			"\"eCPUt\":\"%f\","
 			"\"lCPUt\":\"%f\","
+			"\"depth\":\"%d\","
 			"\"rFn\":\"%d\","
 			"\"nOr\":\"%d\"},",
 			this->funcId,this->TID, this->wallTimeEnter, this->wallTimeLeave,
-			this->cpuTimeEnter, this->cpuTimeLeave, this->prevFunction->callOrderNumber, this->callOrderNumber);
+			this->cpuTimeEnter, this->cpuTimeLeave, this->depth, this->prevFunction->callOrderNumber, this->callOrderNumber);
 	} else
 	{
 		Logger::LOGInSh("{"
@@ -28,10 +29,11 @@ void FunctionClass::Serialize()
 			"\"lWALLt\":\"%f\","
 			"\"eCPUt\":\"%f\","
 			"\"lCPUt\":\"%f\","
+			"\"depth\":\"%d\","
 			"\"rFn\":\"\","
 			"\"nOr\":\"%d\"},",
 			this->funcId, this->TID, this->wallTimeEnter, this->wallTimeLeave,
-			this->cpuTimeEnter, this->cpuTimeLeave, this->callOrderNumber);
+			this->cpuTimeEnter, this->cpuTimeLeave, this->depth, this->callOrderNumber);
 	}
 
 
@@ -39,8 +41,11 @@ void FunctionClass::Serialize()
 	{
 		for (auto function : this->calledFunctions)
 		{
-			function->Serialize();
-			delete function;
+			if(function != NULL)
+			{
+				function->Serialize();
+				delete function;
+			}
 		}
 		calledFunctions.clear();
 	}

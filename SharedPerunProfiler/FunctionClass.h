@@ -20,6 +20,7 @@ public:
 	double cpuTimeLeave;
 	double wallTimeLeave;
 	int callOrderNumber;
+	int depth;
 	std::list<FunctionClass*> calledFunctions;
 
 	void Serialize();
