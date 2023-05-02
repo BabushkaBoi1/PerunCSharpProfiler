@@ -32,6 +32,7 @@ def make_function_df(json_data) -> pd.DataFrame:
 
     functions_merge_df['class'] = functions_merge_df['fName'].str.split('::').str[0]
     functions_merge_df['function'] = functions_merge_df['fName'].str.split('::').str[1]
+    functions_merge_df['depth'] = functions_merge_df['depth'].astype(int)
 
     return functions_merge_df
 
@@ -74,6 +75,7 @@ def agregate_objectsize_to_functions(df_func, df_objects, thread=None) -> pd.Dat
     result_df['objectSizeSum'] = result_df['nOr'].map(summed.set_index('fnc')['objSize'])
     result_df['count'] = result_df['nOr'].map(count_functions.set_index('fnc')['count'])
     result_df['objectSizeSum'].fillna(0, inplace=True)
+    result_df['count'].fillna(0, inplace=True)
 
     if thread is None:
         df_tmp = make_threads_df(df_func, df_objects)
@@ -85,6 +87,7 @@ def agregate_objectsize_to_functions(df_func, df_objects, thread=None) -> pd.Dat
 
 
 def show_treemap(df_func, max_depth):
+    df_func = df_func[df_func['depth'] <= max_depth]
     stack = np.stack((df_func['class'], df_func['function'], df_func['cpuTime'], df_func['wallTime'], df_func['count']), axis=-1)
     fig = go.Figure(go.Treemap(
         ids=df_func['nOr'],
@@ -114,6 +117,8 @@ def show_treemap(df_func, max_depth):
 
 def show_treemap_func(df_func, max_depth, thread):
     df_func = df_func[df_func['TID'] == thread]
+    df_func['depth'] = df_func['depth'].astype(int)
+    df_func = df_func[df_func['depth'] <= max_depth]
     stack = np.stack((df_func['class'], df_func['function'], df_func['cpuTime'], df_func['wallTime']), axis=-1)
     fig = go.Figure(go.Treemap(
         ids=df_func['nOr'],
@@ -155,7 +160,7 @@ def make_scatterplot(df_obj, name):
     df_obj = df_obj.rename(columns={'objSize': 'Object size (Bytes)'})
 
     plt.figure(figsize=(14, 8))
-    ax = sns.scatterplot(x='eCPUt', y='objType', size='Object size (Bytes)', hue='Object type', data=df_obj)
+    ax = sns.scatterplot(x='eWALLt', y='objType', size='Object size (Bytes)', hue='Object type', data=df_obj)
 
     ax.set_ylabel('Object types')
     ax.set_xlabel('Wall time')
@@ -184,7 +189,7 @@ def make_scatterplot_with_func(df_func, df_obj, name):
 def display_top_callbacks_functions(df_func, topN, name, sortBy='count'):
     by = 'fID'
     if sortBy == 'count':
-        by = 'fName'
+        by = 'fID'
     count_functions = df_func.groupby(by).size().reset_index(name='count')
     grouped_df = df_func.groupby([by]).agg({
         'class': 'first',
@@ -202,7 +207,7 @@ def display_top_callbacks_functions(df_func, topN, name, sortBy='count'):
     df['wallTime'] = df['wallTime'] + ' ms'
     df = df.rename(columns={'wallTime': 'Time'})
 
-    dfi.export(df, 'Experiments/CacheManagerExample/tableFunctions'+name+sortBy+'.png', table_conversion="png")
+    dfi.export(df, 'Data/tableFunctions'+name+sortBy+'.png', table_conversion="png")
 
 
 def display_top_allocation_objects(df_obj, topN, name, sortBy='count'):
@@ -219,14 +224,46 @@ def display_top_allocation_objects(df_obj, topN, name, sortBy='count'):
     df['objSize'] = df['objSize'] + ' B'
     df = df.rename(columns={'objSize': 'Object size (Bytes)'})
 
-    dfi.export(df, 'Experiments/CacheManagerExample/tableObjects'+name+sortBy+'.png', table_conversion="png")
+    dfi.export(df, 'Data/tableObjects'+name+sortBy+'.png', table_conversion="png")
+
+
+def make_gc_df(data, name) -> pd.DataFrame:
+    gc_events = []
+    for key in data:
+        if key.startswith('GCStarted'):
+            gc_num = int(key[9:])
+            gc_event = {
+                'GC': gc_num,
+                'Type': 'Start',
+                'TID': data[key]['TID'],
+                'Gen0': data[key]['Gen0'],
+                'Gen1': data[key]['Gen1'],
+                'Gen2': data[key]['Gen2'],
+                'eWALLt': data[key]['eWALLt'],
+                'eCPUt': data[key]['eCPUt'],
+                'lWALLt': None,
+                'lCPUt': None
+            }
+            gc_events.append(gc_event)
+        elif key.startswith('GCFinished'):
+            gc_num = int(key[10:])
+            gc_event = next((event for event in gc_events if event['GC'] == gc_num), None)
+            if gc_event:
+                gc_event.update({
+                    'Type': 'Finish',
+                    'lWALLt': data[key]['lWALLt'],
+                    'lCPUt': data[key]['lCPUt']
+                })
+    df = pd.DataFrame(gc_events)
+    dfi.export(df, 'Data/tableGC'+name+'.png', table_conversion="png")
+    return df
 
 
 if __name__ == "__main__":
-    name = 'PerunCSharpProfiler_2023-05-01_15_37_27'
-    data = parse_json('Experiments/CacheManagerExample/run2/'+name+'.json')
-    mode = 1
-
+    name = 'AvalonStudioAllocNoGC3'
+    data = parse_json('Data/'+name+'.json')
+    mode = 2
+    gc = 1
     if mode == 0:
         dfFunctions = make_function_df(data)
         dfObjects = make_objects_df(data)
@@ -238,13 +275,13 @@ if __name__ == "__main__":
         display_top_allocation_objects(dfObjects, 10, name, 'objSize')
 
         agregate_df_functions = agregate_objectsize_to_functions(dfFunctions, dfObjects)
-        show_treemap(agregate_df_functions, 5)
+        show_treemap(agregate_df_functions, 7)
         df_obj_filter = filter_objets(dfObjects, 10)
         make_scatterplot(df_obj_filter, name)
 
     elif mode == 1:
         dfFunctions = make_function_df(data)
-        show_treemap_func(dfFunctions, 7, '0x000002C758E8C0A0')
+        show_treemap_func(dfFunctions, 5, '0x000001E60578B890')
         display_top_callbacks_functions(dfFunctions, 10, name, 'count')
         display_top_callbacks_functions(dfFunctions, 10, name, 'wallTime')
 
@@ -254,4 +291,7 @@ if __name__ == "__main__":
         display_top_allocation_objects(dfObjects, 10, name, 'objSize')
         df_obj_filter = filter_objets(dfObjects, 10)
         make_scatterplot(df_obj_filter, name)
+        if gc == 1:
+            gc_df = make_gc_df(data,name)
+            display(gc_df)
 
