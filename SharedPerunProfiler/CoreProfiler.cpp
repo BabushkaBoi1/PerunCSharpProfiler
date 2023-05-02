@@ -858,6 +858,10 @@ HRESULT CoreProfiler::GarbageCollectionFinished() {
 		"\"lCPUt\":\"%f\"}",
 		gcNumber, threadId, OS::GetWallTime(), OS::GetCpuTime());
 
+	if (!this->isDeallocEnable)
+	{
+		return S_OK;
+	}
 	{
 		AutoLock locker(_lock);
 		list<ObjectID> objectsToDelete;
