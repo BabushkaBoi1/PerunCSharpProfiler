@@ -8,7 +8,7 @@ void ObjectClass::Serialize()
 	if(this->functionNumOrder != -1)
 	{
 		Logger::LOG("{"
-			"\"TID\":\"%d\","
+			"\"TID\":\"0x%p\","
 			"\"objId\":\"0x%p\","
 			"\"objSize\":\"%d\","
 			"\"objType\":\"%s\","
@@ -21,7 +21,7 @@ void ObjectClass::Serialize()
 	else
 	{
 		Logger::LOG("{"
-			"\"TID\":\"%d\","
+			"\"TID\":\"0x%p\","
 			"\"objId\":\"0x%p\","
 			"\"objSize\":\"%d\","
 			"\"objType\":\"%s\","

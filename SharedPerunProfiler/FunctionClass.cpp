@@ -10,7 +10,7 @@ void FunctionClass::Serialize()
 	{
 		Logger::LOGInSh("{"
 			"\"fID\":\"%p\","
-			"\"TID\":\"%d\","
+			"\"TID\":\"0x%p\","
 			"\"eWALLt\":\"%f\","
 			"\"lWALLt\":\"%f\","
 			"\"eCPUt\":\"%f\","
@@ -23,7 +23,7 @@ void FunctionClass::Serialize()
 	{
 		Logger::LOGInSh("{"
 			"\"fID\":\"%p\","
-			"\"TID\":\"%d\","
+			"\"TID\":\"0x%p\","
 			"\"eWALLt\":\"%f\","
 			"\"lWALLt\":\"%f\","
 			"\"eCPUt\":\"%f\","

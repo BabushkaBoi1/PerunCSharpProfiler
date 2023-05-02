@@ -71,7 +71,7 @@ Logger::Logger() {
 #else
 	auto tlocal = localtime(&now);
 #endif
-	::strftime(time, sizeof(time), "PerunCSharpProfiler_%F_%H%M.json", tlocal);
+	::strftime(time, sizeof(time), "PerunCSharpProfiler_%F_%H_%M_%S.json", tlocal);
 
 	_file.open(logDir + "/" + time, std::ios::out);
 }

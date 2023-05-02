@@ -263,10 +263,10 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 			COR_PRF_MONITOR_CLASS_LOADS |
 			COR_PRF_MONITOR_GC |
 			COR_PRF_MONITOR_THREADS |
-			COR_PRF_MONITOR_EXCEPTIONS |
 			COR_PRF_MONITOR_OBJECT_ALLOCATED | 
 			COR_PRF_ENABLE_OBJECT_ALLOCATED |
 			COR_PRF_MONITOR_ENTERLEAVE |
+			COR_PRF_MONITOR_EXCEPTIONS |
 			COR_PRF_ENABLE_FRAME_INFO
 		);
 	} else if (modeStr == 1)
@@ -276,8 +276,9 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 			COR_PRF_MONITOR_ENTERLEAVE |
 			COR_PRF_ENABLE_FUNCTION_ARGS |
 			COR_PRF_ENABLE_FUNCTION_RETVAL |
+			COR_PRF_MONITOR_EXCEPTIONS |
 			COR_PRF_ENABLE_FRAME_INFO);
-	} else
+	} else if (modeStr == 2)
 	{
 		_info->SetEventMask(
 			COR_PRF_MONITOR_MODULE_LOADS |
@@ -285,7 +286,6 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 			COR_PRF_MONITOR_CLASS_LOADS |
 			COR_PRF_MONITOR_GC |
 			COR_PRF_MONITOR_THREADS |
-			COR_PRF_MONITOR_EXCEPTIONS |
 			COR_PRF_MONITOR_OBJECT_ALLOCATED |
 			COR_PRF_ENABLE_OBJECT_ALLOCATED);
 	}
@@ -311,11 +311,11 @@ HRESULT CoreProfiler::Shutdown() {
 			auto& function = thread.second;
 			if (function.second == NULL)
 			{
-				break;
+				continue;
 			}
 
 			// TODO: some functions in the end of program dont get FunctionLeave callback, temporary solution is to give them time of shutdown callback
-			while(1)
+			while(true)
 			{
 				if (function.second->cpuTimeLeave == NULL || function.second->wallTimeLeave == NULL)
 				{
@@ -396,8 +396,8 @@ void CoreProfiler::Enter(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 		function->funcId = functionID;
 		function->funcInfo = functionInfo;
 		function->TID = threadId;
-		function->cpuTimeEnter = OS::GetCpuTime();
 		function->wallTimeEnter = OS::GetWallTime();
+		function->cpuTimeEnter = OS::GetCpuTime();
 
 		if(m_activeFunctionInThread[threadId].second != nullptr)
 		{
@@ -423,7 +423,7 @@ void CoreProfiler::Leave(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
 	ThreadID threadId;
 	_info->GetCurrentThreadID(&threadId);
-	if (m_activeFunctionInThread[threadId].second != nullptr)
+	if (m_activeFunctionInThread.find(threadId) != m_activeFunctionInThread.end())
 	{
 		auto& activeFunction = m_activeFunctionInThread[threadId].second;
 		if (activeFunction->funcId != functionID)
@@ -445,7 +445,7 @@ void CoreProfiler::TailCall(FunctionID functionID, COR_PRF_ELT_INFO eltInfo)
 {
 	ThreadID threadId;
 	_info->GetCurrentThreadID(&threadId);
-	if (m_activeFunctionInThread[threadId].second != nullptr)
+	if (m_activeFunctionInThread.find(threadId) != m_activeFunctionInThread.end())
 	{
 		auto& activeFunction = m_activeFunctionInThread[threadId].second;
 		if (activeFunction->funcId != functionID)
@@ -745,10 +745,34 @@ HRESULT CoreProfiler::ExceptionOSHandlerLeave(UINT_PTR __unused) {
 }
 
 HRESULT CoreProfiler::ExceptionUnwindFunctionEnter(FunctionID functionId) {
+	if (functionId == 0)
+	{
+		return S_OK;
+	}
+	if (g_CoreProfiler != NULL)
+	{
+		g_CoreProfiler->Enter(functionId, NULL);
+	}
+
 	return S_OK;
 }
 
 HRESULT CoreProfiler::ExceptionUnwindFunctionLeave() {
+	ThreadID threadId;
+	_info->GetCurrentThreadID(&threadId);
+
+	if (m_activeFunctionInThread.find(threadId) != m_activeFunctionInThread.end())
+	{
+		auto& activeFunction = m_activeFunctionInThread[threadId].second;
+
+		activeFunction->cpuTimeLeave = OS::GetCpuTime();
+		activeFunction->wallTimeLeave = OS::GetWallTime();
+
+		if (activeFunction->prevFunction != nullptr)
+		{
+			m_activeFunctionInThread[threadId].second = activeFunction->prevFunction;
+		}
+	}
 	return S_OK;
 }
 

@@ -14,7 +14,7 @@ public:
 	FunctionClass *prevFunction;
 	FunctionID funcId;
 	FunctionInfo *funcInfo;
-	int TID;
+	ThreadID TID;
 	double cpuTimeEnter;
 	double wallTimeEnter;
 	double cpuTimeLeave;
