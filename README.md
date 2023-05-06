@@ -2,9 +2,6 @@
 
 This is repository of Perun module for profiling C#/.NET programs.
 
-Project SharedPerunProfiler is the main source of implementation, other two projects are for builds on Windows and Linux.
-Linux build is not working because of dependencies on nakedcallbacks.asm. Whole project is made in Visual studio 2022 Enterprsie.
-
 ## Requirements
 - Installed .NET Core 1.0 or later
 - Installed Visual Studio 2022
@@ -59,5 +56,17 @@ Linux build is not working in this moment, because of unresolved dependencies to
   
 ## Manual for vizualization
 
+1. Run script .\PerunVizualizations\main.py with these arguments
+  - [-h, --help] -- show this help message and exit
+  - [-p PATH, --path PATH] -- path to profile data file
+  - [-gs {wallTime,cpuTime}, --gScatterPlot {wallTime,cpuTime}] -- Scatter plot in wall/cpu time
+  - [-gt {functions,functionsWithAlloc}, --gTreemap {functions,functionsWithAlloc}] -- Treemap graph for functions or functions with allocation
+  - [-t THREAD, --thread THREAD] -- name of thread
+  - [-n NUMBER, --number NUMBER] -- show this number of objects, can be use with any graph/table (default 10)
+  - [-s SAVEPATH, --savePath SAVEPATH] -- path to save plot
+  - [-m {0,1,2}, --mode {0,1,2}] -- mode for profile (default 0)
+  - [-tabF {count,wallTime,cpuTime}, --tableFunctions {count,wallTime,cpuTime}] -- make table for functions
+  - [-tabO {count,objSize}, --tableObjects {count,objSize}] -- make table for objects
 
-## Known issues
+Example 
+> $ python3 main.py -p Data\IronPythonEx3.json -m 0 -tabF count -gs wallTime -tabO objSize -gt functionsWithAlloc -n 8
