@@ -137,7 +137,7 @@ bool CoreProfiler::Mapper(FunctionID functionId)
 				delete[] pszName;
 				return false;
 			}
-		}
+		} 
 		
 		delete[] pszName;
 	}
@@ -341,7 +341,11 @@ HRESULT CoreProfiler::Shutdown() {
 			if (function.second != nullptr)
 			{
 				function.second->Serialize();
-				delete function.second;
+				if (function.second != nullptr)
+				{
+					delete function.second;
+				}
+				
 				m_activeFunctionInThread[thread.first].second = nullptr;
 			}
 		}
@@ -378,10 +382,7 @@ HRESULT CoreProfiler::Shutdown() {
 			OS::GetPid(), OS::GetTid(), wallTime, cpuTime);
 
 		m_objectsAlloc.clear();
-		if (!m_functionMap.empty())
-		{
-			m_functionMap.clear();
-		}
+		m_functionMap.clear();
 		m_activeFunctionInThread.clear();
 		m_classes.clear();
 		listOfAllowedAssemblies.clear();
@@ -586,26 +587,10 @@ HRESULT CoreProfiler::JITInlining(FunctionID callerId, FunctionID calleeId, BOOL
 }
 
 HRESULT CoreProfiler::ThreadCreated(ThreadID threadId) {
-	//Logger::LOG("\"Thread\":{"
-	//	"\"act\":\"created\","
-	//	"\"PID\":\"%d\","
-	//	"\"TID\":\"%d\","
-	//	"\"eWALLt\":\"%f\","
-	//	"\"eCPUt\":\"%f\"}",
-	//	OS::GetPid(), threadId, OS::GetWallTime(), OS::GetCpuTime());
-
 	return S_OK;
 }
 
 HRESULT CoreProfiler::ThreadDestroyed(ThreadID threadId) {
-	//Logger::LOG("\"Thread\":{"
-	//	"\"action\":\"destroyed\","
-	//	"\"PID\":\"%d\","
-	//	"\"TID\":\"%d\","
-	//	"\"eWALLt\":\"%f\","
-	//	"\"eCPUt\":\"%f\"}",
-	//	OS::GetPid(), threadId, OS::GetWallTime(), OS::GetCpuTime());
-
 	return S_OK;
 }
 
@@ -682,6 +667,41 @@ HRESULT CoreProfiler::RuntimeThreadResumed(ThreadID threadId) {
 }
 
 HRESULT CoreProfiler::MovedReferences(ULONG cMovedObjectIDRanges, ObjectID* oldObjectIDRangeStart, ObjectID* newObjectIDRangeStart, ULONG* cObjectIDRangeLength) {
+	if (!this->isDeallocEnable)
+	{
+		return S_OK;
+	}
+	{
+		AutoLock locker(_lock);
+
+		std::map<ObjectID, ObjectID> tmp_map;
+		for (ULONG i = 0; i < cMovedObjectIDRanges; i++)
+		{
+
+			for (auto& [key, value] : m_objectsAlloc)
+			{
+				if (oldObjectIDRangeStart[i] <= key && key < newObjectIDRangeStart[i] + cObjectIDRangeLength[i])
+				{
+					auto newObjectID = newObjectIDRangeStart[i] + (key - oldObjectIDRangeStart[i]);
+					tmp_map[key] = newObjectID;
+					value->untilGcNumber = gcNumber;
+				}
+
+				// range is over, no point to continue iteration
+				if (key >= newObjectIDRangeStart[i] + cObjectIDRangeLength[i])
+				{
+					break;
+				}
+			}
+		}
+		for (auto& [key, value] : tmp_map)
+		{
+			auto it = m_objectsAlloc.extract(key);
+			it.key() = value;
+			m_objectsAlloc.insert(std::move(it));
+			m_objectsAlloc.erase(key); // Remove old key
+		}
+	}
 	return S_OK;
 }
 
@@ -702,6 +722,7 @@ HRESULT CoreProfiler::ObjectAllocated(ObjectID objectId, ClassID classId) {
 		object->threadId = pThreadId;
 		object->typeName = name;
 		object->gcNumber = this->gcNumber;
+		object->untilGcNumber = this->gcNumber;
 
 		if(m_activeFunctionInThread[pThreadId].second != nullptr)
 		{
@@ -845,6 +866,29 @@ HRESULT CoreProfiler::GarbageCollectionStarted(int cGenerations, BOOL* generatio
 }
 
 HRESULT CoreProfiler::SurvivingReferences(ULONG cSurvivingObjectIDRanges, ObjectID* objectIDRangeStart, ULONG* cObjectIDRangeLength) {
+	if (!this->isDeallocEnable)
+	{
+		return S_OK;
+	}
+	{
+		AutoLock locker(_lock);
+		for (ULONG i = 0; i < cSurvivingObjectIDRanges; i++)
+		{
+			for (auto& [key, value] : m_objectsAlloc)
+			{
+				if (objectIDRangeStart[i] <= key && key < objectIDRangeStart[i] + cObjectIDRangeLength[i])
+				{
+					value->untilGcNumber = gcNumber;
+				}
+
+				// range is over, no point to continue iteration
+				if (key >= objectIDRangeStart[i] + cObjectIDRangeLength[i])
+				{
+					break;
+				}
+			}
+		}
+	}
 	return S_OK;
 }
 
@@ -868,7 +912,7 @@ HRESULT CoreProfiler::GarbageCollectionFinished() {
 
 		for (auto& object : m_objectsAlloc)
 		{
-			if (object.second->gcNumber != gcNumber)
+			if (object.second->untilGcNumber != gcNumber)
 			{
 				m_objectsDeAlloc[object.first] = object.second;
 				objectsToDelete.push_back(object.first);
@@ -880,6 +924,7 @@ HRESULT CoreProfiler::GarbageCollectionFinished() {
 		{
 			m_objectsAlloc.erase(objectToDelete);
 		}
+		objectsToDelete.clear();
 	}
 
 	return S_OK;
@@ -930,62 +975,10 @@ HRESULT CoreProfiler::ReJITError(ModuleID moduleId, mdMethodDef methodId, Functi
 }
 
 HRESULT CoreProfiler::MovedReferences2(ULONG cMovedObjectIDRanges, ObjectID* oldObjectIDRangeStart, ObjectID* newObjectIDRangeStart, SIZE_T* cObjectIDRangeLength) {
-	if (!this->isDeallocEnable)
-	{
-		return S_OK;
-	}
-	{
-		AutoLock locker(_lock);
-
-
-		for (int i = 0; i < cMovedObjectIDRanges; i++)
-		{
-
-			for (auto object : m_objectsAlloc)
-			{
-				if (oldObjectIDRangeStart[i] <= object.second->objectId && object.second->objectId < newObjectIDRangeStart[i] + cObjectIDRangeLength[i])
-				{
-					
-					auto newObjectID = newObjectIDRangeStart[i] + (object.first - oldObjectIDRangeStart[i]);
-					object.second->gcNumber = gcNumber;
-					object.second->objectId = newObjectID;
-				}
-
-				// range is over, no point to continue iteration
-				if (object.second->objectId >= newObjectIDRangeStart[i] + cObjectIDRangeLength[i])
-				{
-					break;
-				}
-			}
-		}
-	}
 	return S_OK;
 }
 
 HRESULT CoreProfiler::SurvivingReferences2(ULONG cSurvivingObjectIDRanges, ObjectID* objectIDRangeStart, SIZE_T* cObjectIDRangeLength) {
-	if (!this->isDeallocEnable)
-	{
-		return S_OK;
-	}
-	{
-		AutoLock locker(_lock);
-		for (int i = 0; i < cSurvivingObjectIDRanges; i++)
-		{
-			for (auto object : m_objectsAlloc)
-			{
-				if (objectIDRangeStart[i] <= object.second->objectId && object.second->objectId < objectIDRangeStart[i] + cObjectIDRangeLength[i])
-				{
-					object.second->gcNumber = gcNumber;
-				}
-
-				// range is over, no point to continue iteration
-				if (object.second->objectId >= objectIDRangeStart[i] + cObjectIDRangeLength[i])
-				{
-					break;
-				}
-			}
-		}
-	}
 	return S_OK;
 }
 

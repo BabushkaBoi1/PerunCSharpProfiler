@@ -13,6 +13,7 @@ public:
 	ULONG size;
 	std::string typeName;
 	int gcNumber;
+	int untilGcNumber;
 	double cpuTimeAllocation;
 	double wallTimeAllocation;
 	int functionNumOrder = -1;
