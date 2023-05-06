@@ -1,13 +1,13 @@
 import pandas as pd
 import seaborn as sns
 import json
-import plotly.express as px
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import numpy as np
 import argparse
 import dataframe_image as dfi
 from IPython.display import display
+import os
 
 
 def parse_json(file):
@@ -37,6 +37,17 @@ def make_function_df(json_data) -> pd.DataFrame:
     return functions_merge_df
 
 
+def make_objects_df_2(json_data) -> pd.DataFrame:
+    objects_df = pd.DataFrame(json_data['Objects'])
+    display(objects_df)
+    # objects_df = objects_df.dropna()
+    objects_df['objSize'] = objects_df['objSize'].astype(int)
+    objects_df['untilGC'] = objects_df['untilGC'].astype(int)
+    objects_df['GC'] = objects_df['untilGC'].astype(int)
+
+    return objects_df
+
+
 def make_objects_df(json_data) -> pd.DataFrame:
     objects_df = pd.DataFrame(json_data['Objects'])
     objects_df = objects_df.dropna()
@@ -44,23 +55,20 @@ def make_objects_df(json_data) -> pd.DataFrame:
     objects_df['eCPUt'] = objects_df['eCPUt'].astype(float)
     objects_df['objSize'] = objects_df['objSize'].astype(int)
     objects_df['Object type'] = objects_df['objType'].str.split('.').str[0]
+    objects_df['untilGC'] = objects_df['untilGC'].astype(int)
+    objects_df['GC'] = objects_df['GC'].astype(int)
 
     return objects_df
 
 
-def make_threads_df(df_func, df_objects) -> pd.DataFrame:
-    # Group the functions dataframe by TID and count the number of rows
+def make_threads_df_func(df_func) -> pd.DataFrame:
     functions_grouped = df_func.groupby('TID').size().reset_index(name='functions_count')
+    return functions_grouped
 
-    # Group the Objects dataframe by TID and count the number of rows
+
+def make_threads_df_obj(df_objects) -> pd.DataFrame:
     objects_grouped = df_objects.groupby('TID').size().reset_index(name='objects_count')
-
-    # Merge the two dataframes on TID column
-    result_df = pd.merge(functions_grouped, objects_grouped, on='TID')
-
-    # Rename the columns
-    result_df.columns = ['thread', 'count_functions', 'count_objects']
-    return result_df
+    return objects_grouped
 
 
 def agregate_objectsize_to_functions(df_func, df_objects, thread=None) -> pd.DataFrame:
@@ -78,7 +86,7 @@ def agregate_objectsize_to_functions(df_func, df_objects, thread=None) -> pd.Dat
     result_df['count'].fillna(0, inplace=True)
 
     if thread is None:
-        df_tmp = make_threads_df(df_func, df_objects)
+        df_tmp = make_threads_df_func(df_func)
         thread = df_tmp.loc[0, 'thread']
 
     functions_thread = result_df[result_df['TID'] == thread]
@@ -88,11 +96,12 @@ def agregate_objectsize_to_functions(df_func, df_objects, thread=None) -> pd.Dat
 
 def show_treemap(df_func, max_depth):
     df_func = df_func[df_func['depth'] <= max_depth]
-    stack = np.stack((df_func['class'], df_func['function'], df_func['cpuTime'], df_func['wallTime'], df_func['count']), axis=-1)
+    stack = np.stack((df_func['class'], df_func['function'], df_func['cpuTime'], df_func['wallTime'], df_func['count']),
+                     axis=-1)
     fig = go.Figure(go.Treemap(
         ids=df_func['nOr'],
-        labels=df_func['fName'],
         parents=df_func['rFn'],
+        labels=df_func['fName'],
         marker_colorscale='reds',
         values=df_func['objectSizeSum'],
         hovertemplate='Function: <b>%{customdata[1]}</b>'
@@ -117,7 +126,6 @@ def show_treemap(df_func, max_depth):
 
 def show_treemap_func(df_func, max_depth, thread):
     df_func = df_func[df_func['TID'] == thread]
-    df_func['depth'] = df_func['depth'].astype(int)
     df_func = df_func[df_func['depth'] <= max_depth]
     stack = np.stack((df_func['class'], df_func['function'], df_func['cpuTime'], df_func['wallTime']), axis=-1)
     fig = go.Figure(go.Treemap(
@@ -155,46 +163,37 @@ def filter_objets(df_obj, number) -> pd.DataFrame:
     return df2
 
 
-def make_scatterplot(df_obj, name):
+def make_scatterplot(df_obj, name, valueX, save_path):
     df_obj = df_obj[df_obj['objType'] != ""]
     df_obj = df_obj.rename(columns={'objSize': 'Object size (Bytes)'})
 
+    if valueX == "wallTime":
+        valueX = "eWALLt"
+    if valueX == "cpuTime":
+        valueX = "eCPUt"
+
     plt.figure(figsize=(14, 8))
-    ax = sns.scatterplot(x='eWALLt', y='objType', size='Object size (Bytes)', hue='Object type', data=df_obj)
+    ax = sns.scatterplot(x=valueX, y='objType', size='Object size (Bytes)', hue='Object type', data=df_obj)
 
     ax.set_ylabel('Object types')
-    ax.set_xlabel('Wall time')
+    ax.set_xlabel('WALL time [s]')
     plt.subplots_adjust(left=0.3)
     plt.title('Scatter Plot of Object Allocation ')
 
     # Show the plot
-    plt.savefig("Plots/"+name)
+    plt.savefig(save_path + "/scatterPlot" + name)
 
 
-def make_scatterplot_with_func(df_func, df_obj, name):
-    df_obj = df_obj[df_obj['objType'] != ""]
-    df_obj = df_obj.rename(columns={'objSize': 'Object size (Bytes)'})
-    plt.figure(figsize=(14, 8))
-    ax = sns.scatterplot(x='eWALLt', y='fName', size='Object size (Bytes)', hue='Object type', data=df_obj)
-
-    ax.set_ylabel('Functions')
-    ax.set_xlabel('Wall time')
-    plt.subplots_adjust(left=0.3)
-    plt.title('Scatter Plot of Object Allocation ')
-
-    # Show the plot
-    plt.savefig("Plots/"+name)
-
-
-def display_top_callbacks_functions(df_func, topN, name, sortBy='count'):
+def display_top_callbacks_functions(df_func, topN, name, save_path, sortBy):
     by = 'fID'
     if sortBy == 'count':
-        by = 'fID'
+        by = 'fName'
     count_functions = df_func.groupby(by).size().reset_index(name='count')
     grouped_df = df_func.groupby([by]).agg({
         'class': 'first',
         'function': 'first',
-        'wallTime': 'sum'
+        'wallTime': 'sum',
+        'cpuTime': 'sum'
     }).reset_index()
     df = pd.merge(grouped_df, count_functions, on=by)
     df = df.sort_values(sortBy, ascending=False).reset_index()
@@ -207,10 +206,10 @@ def display_top_callbacks_functions(df_func, topN, name, sortBy='count'):
     df['wallTime'] = df['wallTime'] + ' ms'
     df = df.rename(columns={'wallTime': 'Time'})
 
-    dfi.export(df, 'Data/tableFunctions'+name+sortBy+'.png', table_conversion="png")
+    dfi.export(df, save_path+'/tableFunctions' + name + sortBy + '.png', table_conversion="png")
 
 
-def display_top_allocation_objects(df_obj, topN, name, sortBy='count'):
+def display_top_allocation_objects(df_obj, topN, name, save_path, sortBy):
     df_obj = df_obj[df_obj['objType'] != ""]
     count_functions = df_obj.groupby('objType').size().reset_index(name='count')
     grouped_df = df_obj.groupby(['objType']).agg({
@@ -224,10 +223,10 @@ def display_top_allocation_objects(df_obj, topN, name, sortBy='count'):
     df['objSize'] = df['objSize'] + ' B'
     df = df.rename(columns={'objSize': 'Object size (Bytes)'})
 
-    dfi.export(df, 'Data/tableObjects'+name+sortBy+'.png', table_conversion="png")
+    dfi.export(df, save_path +'/tableObjects' + name + sortBy + '.png', table_conversion="png")
 
 
-def make_gc_df(data, name) -> pd.DataFrame:
+def make_gc_df(data, name, time) -> pd.DataFrame:
     gc_events = []
     for key in data:
         if key.startswith('GCStarted'):
@@ -255,43 +254,134 @@ def make_gc_df(data, name) -> pd.DataFrame:
                     'lCPUt': data[key]['lCPUt']
                 })
     df = pd.DataFrame(gc_events)
-    dfi.export(df, 'Data/tableGC'+name+'.png', table_conversion="png")
+
+    df['eWALLt'] = df['eWALLt'].astype(float)
+    df['lWALLt'] = df['lWALLt'].astype(float)
+
+    df['Time [ms]'] = (df['lWALLt'] - df['eWALLt']) * 1000
+    df['Percent Time'] = df['Time [ms]'] / time * 100
+    print(df['Percent Time'].sum())
+    dfi.export(df, 'Experiments/tableGC' + name + '.png', table_conversion="png")
+
     return df
 
 
-if __name__ == "__main__":
-    name = 'AvalonStudioAllocNoGC3'
-    data = parse_json('Data/'+name+'.json')
-    mode = 2
-    gc = 1
+def make_profiler_df(data) -> pd.DataFrame:
+    pr_events = []
+    for key in data:
+        if key.startswith('Profiler'):
+            pr_event = {
+                'act': data[key]['act'],
+                'PID': data[key]['PID'],
+                'TID': data[key]['TID'],
+                'eWALLt': data[key]['eWALLt'],
+                'eCPUt': data[key]['eCPUt'],
+            }
+            pr_events.append(pr_event)
+    df = pd.DataFrame(pr_events)
+    df['eWALLt'] = df['eWALLt'].astype(float)
+    return df
+
+
+def dealloc_info(df_obj, gc_number):
+    df2 = df_obj.copy()
+    df_gc_1 = df_obj[df_obj['GC'] == gc_number]
+
+    display(df_gc_1)
+    sum_col1 = df_gc_1['objSize'].sum()
+    count = df_gc_1['objSize'].count()
+    print(sum_col1)
+    print(count)
+    df_r = df_obj[df2['untilGC'] == gc_number]
+    # display_top_allocation_objects(dfObjects, 10, name, 'count')
+    # display_top_allocation_objects(dfObjects, 10, name, 'objSize')
+    sum_col1 = df_r['objSize'].sum()
+    count = df_r['objSize'].count()
+    print(sum_col1)
+    print(count)
+
+
+def start_program():
+    parser = argparse.ArgumentParser(description="PerunCSharp Profiler visualization module")
+    parser.add_argument("-p", "--path", default="Data/data.json", help="path to profile file")
+    parser.add_argument("-gs", "--gScatterPlot", choices=['wallTime', 'cpuTime'],
+                        help="Scatter plot in wall/cpu time, second value is number of types of objets")
+    parser.add_argument("-gt", "--gTreemap", choices=['functions', 'functionsWithAlloc'],
+                        help="Treemap mode for only functions or functions with allocation (default functions)")
+    parser.add_argument("-t", "--thread", help="name of thread")
+    parser.add_argument("-n", "--number", default=10, type=int, help="show this number, can be use with any graph/table"
+                                                                     "(default 10)")
+    parser.add_argument("-s", "--savePath", default="Plots", help="path to save plot")
+    parser.add_argument("-m", "--mode", choices=[0, 1, 2], type=int, default=0, help="mode for profile (default 0)")
+    parser.add_argument("-tabF", "--tableFunctions", choices=['count', 'wallTime', 'cpuTime'], help="Table for "
+                                                                                                    "functions")
+    parser.add_argument("-tabO", "--tableObjects", choices=['count', 'objSize'], help="Table for objects")
+
+    args = parser.parse_args()
+    name = os.path.splitext(os.path.basename(args.path))[0]
+
+    try:
+        data = parse_json(args.path)
+    except:
+        print("Error:loading JSON file failed!")
+        return
+    mode = args.mode
+    thread = args.thread
     if mode == 0:
-        dfFunctions = make_function_df(data)
-        dfObjects = make_objects_df(data)
-        tmp_df = make_threads_df(dfFunctions, dfObjects)
-        display(tmp_df)
-        display_top_callbacks_functions(dfFunctions, 10, name, 'count')
-        display_top_callbacks_functions(dfFunctions, 10, name, 'wallTime')
-        display_top_allocation_objects(dfObjects, 10, name, 'count')
-        display_top_allocation_objects(dfObjects, 10, name, 'objSize')
-
-        agregate_df_functions = agregate_objectsize_to_functions(dfFunctions, dfObjects)
-        show_treemap(agregate_df_functions, 7)
-        df_obj_filter = filter_objets(dfObjects, 10)
-        make_scatterplot(df_obj_filter, name)
-
+        try:
+            dfFunctions = make_function_df(data)
+            dfObjects = make_objects_df(data)
+            if thread is None:
+                thread_df = make_threads_df_func(dfFunctions)
+                thread = thread_df.loc[thread_df['functions_count'].idxmax(), 'TID']
+        except:
+            print("Error: profile data are not compatible!")
+            return
     elif mode == 1:
-        dfFunctions = make_function_df(data)
-        show_treemap_func(dfFunctions, 5, '0x000001E60578B890')
-        display_top_callbacks_functions(dfFunctions, 10, name, 'count')
-        display_top_callbacks_functions(dfFunctions, 10, name, 'wallTime')
-
+        if args.gScatterPlot is not None or args.tableObjects is not None:
+            print("Error: this graph is not compatible with this mode!")
+            return
+        try:
+            dfFunctions = make_function_df(data)
+            if thread is None:
+                thread_df = make_threads_df_func(dfFunctions)
+                thread = thread_df.loc[thread_df['functions_count'].idxmax(), 'TID']
+        except:
+            print("Error: profile data are not compatible!")
+            return
     elif mode == 2:
-        dfObjects = make_objects_df(data)
-        display_top_allocation_objects(dfObjects, 10, name, 'count')
-        display_top_allocation_objects(dfObjects, 10, name, 'objSize')
-        df_obj_filter = filter_objets(dfObjects, 10)
-        make_scatterplot(df_obj_filter, name)
-        if gc == 1:
-            gc_df = make_gc_df(data,name)
-            display(gc_df)
+        if args.gTreemap is not None or args.tableFunctions is not None:
+            print("Error: this visualization is not compatible!")
+            return
+        try:
+            dfObjects = make_objects_df(data)
+            if thread is None:
+                thread_df = make_threads_df_obj(dfObjects)
+                thread = thread_df.loc[thread_df['objects_count'].idxmax(), 'TID']
+        except:
+            print("Error: profile data are not compatible!")
+            return
+    else:
+        print("Error: this mode is not supported")
+        return
 
+    if getattr(args, 'gTreemap'):
+        if args.gTreemap == "functionsWithAlloc":
+            agregate_df = agregate_objectsize_to_functions(dfFunctions, dfObjects, thread)
+            show_treemap(agregate_df, args.number)
+        elif args.gTreemap == "functions":
+            show_treemap_func(dfFunctions, args.number, thread)
+
+    if getattr(args, 'gScatterPlot'):
+        df_obj_filter = filter_objets(dfObjects, args.number)
+        make_scatterplot(df_obj_filter, name, args.gScatterPlot, args.savePath)
+
+    if getattr(args, 'tableFunctions'):
+        display_top_callbacks_functions(dfFunctions, args.number, name, args.savePath, args.tableFunctions)
+
+    if getattr(args, 'tableObjects'):
+        display_top_allocation_objects(dfObjects, args.number, name, args.savePath,  args.tableObjects)
+
+
+if __name__ == "__main__":
+    start_program()
