@@ -124,11 +124,10 @@ public:
 private:
 	std::map<FunctionID, FunctionInfo*> m_functionMap;
 	std::map<ThreadID, std::pair<int, FunctionClass*>> m_activeFunctionInThread;
-	//std::map<ThreadID, int> m_orderNumberByThread;
 	std::atomic<unsigned> _refCount{ 1 };
 	std::map<ClassID, std::string> m_classes;
 	std::map<ObjectID, ObjectClass*> m_objectsAlloc;
-	std::map<ObjectID, ObjectClass*> m_objectsDeAlloc;
+	std::list<ObjectClass*> m_objectsDeAlloc;
 	std::list<std::string> listOfAllowedAssemblies;
 	bool isDeallocEnable = false;
 	int gcNumber = 1;

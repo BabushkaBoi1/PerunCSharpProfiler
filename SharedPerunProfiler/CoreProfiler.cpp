@@ -353,11 +353,15 @@ HRESULT CoreProfiler::Shutdown() {
 
 		Logger::LOGInSh("\"Objects\": [");
 		for (auto& objectDeAlloc : m_objectsDeAlloc){
-			objectDeAlloc.second->Serialize();
-			delete objectDeAlloc.second;
+			objectDeAlloc->Serialize();
+			delete objectDeAlloc;
 		}
 
 		for (auto& objectAlloc : m_objectsAlloc) {
+			if (objectAlloc.second->untilGcNumber != gcNumber)
+			{
+				objectAlloc.second->untilGcNumber = gcNumber + 1;
+			}
 			objectAlloc.second->Serialize();
 			delete objectAlloc.second;
 		}
@@ -914,7 +918,7 @@ HRESULT CoreProfiler::GarbageCollectionFinished() {
 		{
 			if (object.second->untilGcNumber != gcNumber)
 			{
-				m_objectsDeAlloc[object.first] = object.second;
+				m_objectsDeAlloc.push_back(object.second);
 				objectsToDelete.push_back(object.first);
 			} 
 		}
