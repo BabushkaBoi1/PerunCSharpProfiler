@@ -23,11 +23,13 @@ CoreProfiler::CoreProfiler()
 	auto allowedAssemblies = OS::ReadEnvironmentVariable("PROFILER_ENABLE_ASSEMBLIES");
 	auto deallocEnable = OS::ReadEnvironmentVariable("PROFILER_ENABLE_DEALLOC");
 
+	// Activate dealloc mode
 	if (deallocEnable == "1")
 	{
 		this->isDeallocEnable = true;
 	}
 
+	// Parser of enabled assemblies
 	if (allowedAssemblies != "")
 	{
 		size_t pos = 0;
@@ -114,6 +116,7 @@ bool CoreProfiler::Mapper(FunctionID functionId)
 		WCHAR* pszName = new WCHAR[nameLen];
 		_info->GetAssemblyInfo(assemblyId, nameLen, &nameLen, pszName, NULL, NULL);
 
+		// Assemblies limitations
 		if (!listOfAllowedAssemblies.empty())
 		{
 			bool isInAllowedAssemblies = false;
@@ -132,6 +135,7 @@ bool CoreProfiler::Mapper(FunctionID functionId)
 			}
 		} else
 		{
+			// System assemblies limitations
 			if (OS::UnicodeToAnsi(pszName).find("System") != string::npos || OS::UnicodeToAnsi(pszName).find("Internal") != string::npos)
 			{
 				delete[] pszName;
@@ -261,6 +265,7 @@ HRESULT CoreProfiler::Initialize(IUnknown* pICorProfilerInfoUnk) {
 
 	auto modeStr = stoi(OS::ReadEnvironmentVariable("PROFILER_MODE"));
 
+	// Set mode for profiling
 	if (modeStr == 0)
 	{
 		_info->SetEventMask(
@@ -312,6 +317,7 @@ HRESULT CoreProfiler::Shutdown() {
 		AutoLock locker(_lock);
 
 		Logger::LOGInSh("\"functions\": [");
+		// Serialize and log functions
 		for (auto& thread : m_activeFunctionInThread)
 		{
 			auto& function = thread.second;
@@ -320,7 +326,7 @@ HRESULT CoreProfiler::Shutdown() {
 				continue;
 			}
 
-			// TODO: some functions in the end of program dont get FunctionLeave callback, temporary solution is to give them time of shutdown callback
+			// Some functions in the end of program dont get FunctionLeave callback, temporary solution is to give them time of shutdown callback
 			while(true)
 			{
 				if (function.second->cpuTimeLeave == NULL || function.second->wallTimeLeave == NULL)
@@ -352,6 +358,7 @@ HRESULT CoreProfiler::Shutdown() {
 		Logger::LOGInSh("{}],");
 
 		Logger::LOGInSh("\"Objects\": [");
+		// Serialize and log Objects
 		for (auto& objectDeAlloc : m_objectsDeAlloc){
 			objectDeAlloc->Serialize();
 			delete objectDeAlloc;
@@ -367,6 +374,7 @@ HRESULT CoreProfiler::Shutdown() {
 		}
 		Logger::LOGInSh("{}],");
 
+		// Serialize and log functions information
 		Logger::LOGInSh("\"functionNames\": {");
 		for (auto& entry : m_functionMap) {
 			if(entry.second != NULL)
@@ -385,6 +393,7 @@ HRESULT CoreProfiler::Shutdown() {
 			"\"eCPUt\":\"%f\"}}",
 			OS::GetPid(), OS::GetTid(), wallTime, cpuTime);
 
+		// clear maps
 		m_objectsAlloc.clear();
 		m_functionMap.clear();
 		m_activeFunctionInThread.clear();

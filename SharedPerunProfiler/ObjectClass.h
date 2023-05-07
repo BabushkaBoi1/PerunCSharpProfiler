@@ -1,3 +1,8 @@
+/*
+ * Bachelor thesis: Performance Analysis of C# Programs
+ *
+ * Author: Hajek Vojtech (xhajek51)
+ */
 #pragma once
 
 #include <list>
@@ -6,6 +11,9 @@
 #include <cor.h>
 #include <corprof.h>
 
+ /**
+  * Class for object allocation
+  */
 class ObjectClass {
 public:
 	ObjectID objectId;

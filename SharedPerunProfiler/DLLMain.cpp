@@ -1,3 +1,10 @@
+/*
+ * Bachelor thesis: Performance Analysis of C# Programs
+ *
+ * Author: Hajek Vojtech (xhajek51)
+ * This file is based on: https://github.com/zodiacon/DotNextMoscow2019
+ */
+
 #include <iostream>
 
 #include "Common.h"
@@ -18,6 +25,7 @@ extern "C" BOOL __stdcall DllMain(HINSTANCE hInstDll, DWORD reason, PVOID) {
 	return TRUE;
 }
 
+// CLSID key 
 class __declspec(uuid("32E2F4DA-1BEA-47ea-88F9-C5DAF691C94A")) CoreProfiler;
 
 extern "C" HRESULT __stdcall DllGetClassObject(REFCLSID rclsid, REFIID riid, void** ppv) {

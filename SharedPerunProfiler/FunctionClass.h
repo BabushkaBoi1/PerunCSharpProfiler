@@ -1,3 +1,8 @@
+/*
+ * Bachelor thesis: Performance Analysis of C# Programs
+ *
+ * Author: Hajek Vojtech (xhajek51)
+ */
 #pragma once
 
 #include <string>
@@ -8,7 +13,9 @@
 #include <cor.h>
 #include <corprof.h>
 
-
+/**
+ * Class for function callback
+ */
 class FunctionClass {
 public:
 	FunctionClass *prevFunction;

@@ -1,3 +1,8 @@
+/*
+ * Bachelor thesis: Performance Analysis of C# Programs
+ *
+ * Author: Hajek Vojtech (xhajek51)
+ */
 #pragma once
 
 #include <fstream>
@@ -6,7 +11,9 @@
 #include <list>
 #include <CoreProfiler.h>
 
-
+ /**
+  * Class for Logger
+  */
 class Logger final {
 public:
 	static Logger& Get();

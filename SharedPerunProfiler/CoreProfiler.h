@@ -1,3 +1,8 @@
+/*
+ * Bachelor thesis: Performance Analysis of C# Programs
+ *
+ * Author: Hajek Vojtech (xhajek51)
+ */
 #pragma once
 
 #include "Common.h"
@@ -16,6 +21,11 @@
 std::string GetTypeName(mdTypeDef type, ModuleID module);
 std::string GetMethodName(FunctionID function);
 
+/**
+ * A class of CoreProfiler
+ *
+ * This class is the implementation of ICorProfilerCallback8 interface
+ */
 class CoreProfiler : public ICorProfilerCallback8 {
 public:
 	CoreProfiler();

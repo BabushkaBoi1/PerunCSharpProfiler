@@ -1,3 +1,9 @@
+/*
+ * Bachelor thesis: Performance Analysis of C# Programs
+ *
+ * Author: Hajek Vojtech (xhajek51)
+ * This file is based on: https://github.com/zodiacon/DotNextMoscow2019
+ */
 #pragma once
 
 class CoreProfilerFactory : public IClassFactory {

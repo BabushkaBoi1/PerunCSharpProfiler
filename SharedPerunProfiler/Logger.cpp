@@ -56,6 +56,7 @@ void Logger::DoInitLog(const char* text)
 }
 
 Logger::Logger() {
+	// get path to log file
 	auto logDir = OS::ReadEnvironmentVariable("PROFILER_LOG_FILE");
 	
 	if (logDir.empty())
