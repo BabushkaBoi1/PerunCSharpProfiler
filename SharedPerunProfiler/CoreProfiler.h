@@ -127,11 +127,12 @@ private:
 	//std::map<ThreadID, int> m_orderNumberByThread;
 	std::atomic<unsigned> _refCount{ 1 };
 	std::map<ClassID, std::string> m_classes;
-	std::map<ObjectID, ObjectClass*> m_objectsAlloc;
-	std::map<ObjectID, ObjectClass*> m_objectsDeAlloc;
+	std::map<ThreadID, std::map<ObjectID, ObjectClass*>> m_objectsAlloc;
+	//std::map<ObjectID, ObjectClass*> m_objectsAlloc;
+	std::list<ObjectClass*> m_objectsDeAlloc;
 	std::list<std::string> listOfAllowedAssemblies;
 	bool isDeallocEnable = false;
-	int gcNumber = 1;
+	int gcNumber = 0;
 
 	Mutex _lock;
 };

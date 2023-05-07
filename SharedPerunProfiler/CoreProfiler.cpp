@@ -353,13 +353,19 @@ HRESULT CoreProfiler::Shutdown() {
 
 		Logger::LOGInSh("\"Objects\": [");
 		for (auto& objectDeAlloc : m_objectsDeAlloc){
-			objectDeAlloc.second->Serialize();
-			delete objectDeAlloc.second;
+			objectDeAlloc->Serialize();
+			delete objectDeAlloc;
 		}
 
-		for (auto& objectAlloc : m_objectsAlloc) {
-			objectAlloc.second->Serialize();
-			delete objectAlloc.second;
+		for (auto& threadAlloc : m_objectsAlloc) {
+			for (auto& object: threadAlloc.second)
+			{
+				gcNumber += 1;
+				object.second->untilGcNumber = gcNumber;
+				object.second->Serialize();
+				delete object.second;
+			}
+			threadAlloc.second.clear();
 		}
 		Logger::LOGInSh("{}],");
 
@@ -674,11 +680,15 @@ HRESULT CoreProfiler::MovedReferences(ULONG cMovedObjectIDRanges, ObjectID* oldO
 	{
 		AutoLock locker(_lock);
 
+		ThreadID pThreadId;
+		_info->GetCurrentThreadID(&pThreadId);
+		auto& m_thread = m_objectsAlloc[pThreadId];
+
 		std::map<ObjectID, ObjectID> tmp_map;
 		for (ULONG i = 0; i < cMovedObjectIDRanges; i++)
 		{
 
-			for (auto& [key, value] : m_objectsAlloc)
+			for (auto& [key, value] : m_thread)
 			{
 				if (oldObjectIDRangeStart[i] <= key && key < newObjectIDRangeStart[i] + cObjectIDRangeLength[i])
 				{
@@ -696,10 +706,10 @@ HRESULT CoreProfiler::MovedReferences(ULONG cMovedObjectIDRanges, ObjectID* oldO
 		}
 		for (auto& [key, value] : tmp_map)
 		{
-			auto it = m_objectsAlloc.extract(key);
+			auto it = m_thread.extract(key);
 			it.key() = value;
-			m_objectsAlloc.insert(std::move(it));
-			m_objectsAlloc.erase(key); // Remove old key
+			m_thread.insert(std::move(it));
+			m_thread.erase(key); // Remove old key
 		}
 	}
 	return S_OK;
@@ -729,7 +739,7 @@ HRESULT CoreProfiler::ObjectAllocated(ObjectID objectId, ClassID classId) {
 			object->functionNumOrder = m_activeFunctionInThread[pThreadId].first;
 		}
 
-		m_objectsAlloc[objectId] = object;
+		m_objectsAlloc[pThreadId][objectId] = object;
 	}
 	
 	return S_OK;
@@ -870,11 +880,16 @@ HRESULT CoreProfiler::SurvivingReferences(ULONG cSurvivingObjectIDRanges, Object
 	{
 		return S_OK;
 	}
+	ThreadID pThreadId;
+	_info->GetCurrentThreadID(&pThreadId);
+	auto& m_thread = m_objectsAlloc[pThreadId];
+
 	{
 		AutoLock locker(_lock);
+
 		for (ULONG i = 0; i < cSurvivingObjectIDRanges; i++)
 		{
-			for (auto& [key, value] : m_objectsAlloc)
+			for (auto& [key, value] : m_thread)
 			{
 				if (objectIDRangeStart[i] <= key && key < objectIDRangeStart[i] + cObjectIDRangeLength[i])
 				{
@@ -909,12 +924,12 @@ HRESULT CoreProfiler::GarbageCollectionFinished() {
 	{
 		AutoLock locker(_lock);
 		list<ObjectID> objectsToDelete;
-
-		for (auto& object : m_objectsAlloc)
+		auto& m_thread = m_objectsAlloc[threadId];
+		for (auto& object : m_thread)
 		{
 			if (object.second->untilGcNumber != gcNumber)
 			{
-				m_objectsDeAlloc[object.first] = object.second;
+				m_objectsDeAlloc.push_back(object.second);
 				objectsToDelete.push_back(object.first);
 			} 
 		}
@@ -922,7 +937,7 @@ HRESULT CoreProfiler::GarbageCollectionFinished() {
 		// delete deallocated objects
 		for (auto objectToDelete : objectsToDelete)
 		{
-			m_objectsAlloc.erase(objectToDelete);
+			m_thread.erase(objectToDelete);
 		}
 		objectsToDelete.clear();
 	}
