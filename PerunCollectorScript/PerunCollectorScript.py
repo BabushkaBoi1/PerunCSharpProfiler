@@ -1,9 +1,9 @@
-from email.policy import default
 import os
 import subprocess
 import argparse
 
 if __name__ == "__main__":
+    # Parse arguments
     parser = argparse.ArgumentParser(description="Argument parser collector script")
     parser.add_argument("-p", "--path", default="Data/", help="path to profile file")
     parser.add_argument("-m", "--mode", default="0", help="mode of profiling")
@@ -35,5 +35,5 @@ if __name__ == "__main__":
     os.environ['PROFILER_ENABLE_DEALLOC'] = args.deallocation
     os.environ['PROFILER_LOG_FILE'] = args.logPath
 
-    # Run command
+    # Run .NET program
     subprocess.run(command, shell=True)

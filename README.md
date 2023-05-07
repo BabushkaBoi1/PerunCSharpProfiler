@@ -1,13 +1,17 @@
 # PerunProfiler
 
-This is repository of Perun module for profiling C#/.NET programs.
+This is repository of Bachelor thesis: Performance Analysis of C# Programs.
+
+Author: Hájek Vojtěch, xhajek51 
+
+
 
 ## Requirements
 - Installed .NET Core 1.0 or later
 - Installed Visual Studio 2022
 - Installed Python 3.10
 
-## Build
+## Build Collector
 ###Windows build for architecture x64
 
 1. open soltuion PerunProfiler.sln in Visual Studio 2022
@@ -18,6 +22,18 @@ Other architectures for Windows were not tested
 
 ###Linux build
 Linux build is not working in this moment, because of unresolved dependencies to nakedcallbacks.asm file.
+
+## Build python scripts
+For Python Visualizations script install these packages
+- pip install pandas
+- pip install seaborn 
+- pip install json 
+- pip install matplotlib 
+- pip install plotly
+- pip install numpy
+- pip install argparse
+- pip install dataframe_image
+
 
 ## Modes for profiling
 - Mode = 0 -- tracing allocations with functions
@@ -69,4 +85,6 @@ Linux build is not working in this moment, because of unresolved dependencies to
   - [-tabO {count,objSize}, --tableObjects {count,objSize}] -- make table for objects
 
 Example 
-> $ python3 main.py -p Data\IronPythonEx3.json -m 0 -tabF count -gs wallTime -tabO objSize -gt functionsWithAlloc -n 8
+> $ python3 main.py -p Data\example.json -m 0 -tabF count -gs wallTime -tabO objSize -gt functionsWithAlloc -n 8
+
+

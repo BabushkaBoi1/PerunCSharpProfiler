@@ -11,22 +11,34 @@ import os
 
 
 def parse_json(file):
+    """
+    Function to parse JSON file
+    :param file: profile JSON data
+    :return: data
+    """
     with open(file) as f:
         return json.load(f)
 
 
 def make_function_df(json_data) -> pd.DataFrame:
+    """
+    Function to make DataFrame for functions
+    :param json_data: profile data
+    :return: DataFrame for functions
+    """
     functions_df = pd.DataFrame(json_data['functions'])
 
     function_names_df = pd.DataFrame.from_dict(json_data['functionNames'], orient='index', columns=['fName'])
     function_names_df.index.name = 'fID'
     functions_merge_df = pd.merge(functions_df, function_names_df, on='fID')
     functions_merge_df = functions_merge_df.dropna()
+
     functions_merge_df['lCPUt'] = functions_merge_df['lCPUt'].astype(float)
     functions_merge_df['eCPUt'] = functions_merge_df['eCPUt'].astype(float)
     functions_merge_df['eWALLt'] = functions_merge_df['eWALLt'].astype(float)
     functions_merge_df['lWALLt'] = functions_merge_df['lWALLt'].astype(float)
 
+    # make column for time in ms
     functions_merge_df['cpuTime'] = (functions_merge_df['lCPUt'] - functions_merge_df['eCPUt']) * 1000
     functions_merge_df['wallTime'] = (functions_merge_df['lWALLt'] - functions_merge_df['eWALLt']) * 1000
 
@@ -37,18 +49,12 @@ def make_function_df(json_data) -> pd.DataFrame:
     return functions_merge_df
 
 
-def make_objects_df_2(json_data) -> pd.DataFrame:
-    objects_df = pd.DataFrame(json_data['Objects'])
-    display(objects_df)
-    # objects_df = objects_df.dropna()
-    objects_df['objSize'] = objects_df['objSize'].astype(int)
-    objects_df['untilGC'] = objects_df['untilGC'].astype(int)
-    objects_df['GC'] = objects_df['untilGC'].astype(int)
-
-    return objects_df
-
-
 def make_objects_df(json_data) -> pd.DataFrame:
+    """
+    Function to make DataFrame for objects
+    :param json_data: profile data
+    :return: DataFrame for objects
+    """
     objects_df = pd.DataFrame(json_data['Objects'])
     objects_df = objects_df.dropna()
     objects_df['eWALLt'] = objects_df['eWALLt'].astype(float)
@@ -62,16 +68,33 @@ def make_objects_df(json_data) -> pd.DataFrame:
 
 
 def make_threads_df_func(df_func) -> pd.DataFrame:
+    """
+    Function to make DataFrame for threads with count of call functions
+    :param df_func: DataFrame of functions
+    :return: DataFrame of threads
+    """
     functions_grouped = df_func.groupby('TID').size().reset_index(name='functions_count')
     return functions_grouped
 
 
 def make_threads_df_obj(df_objects) -> pd.DataFrame:
+    """
+    Function to make DataFrame for threads with count of object allocations
+    :param df_objects: DataFrame of objects
+    :return: DataFrame of threads
+    """
     objects_grouped = df_objects.groupby('TID').size().reset_index(name='objects_count')
     return objects_grouped
 
 
 def agregate_objectsize_to_functions(df_func, df_objects, thread=None) -> pd.DataFrame:
+    """
+    Function to make dataframe of functions with size of allocated objects
+    :param df_func: DataFrame of functions
+    :param df_objects: DataFrame of objects
+    :param thread: Thread name
+    :return: DataFrame of functions with object size
+    """
     df = df_objects.copy()
 
     df = df[df['fnc'].notnull()]
@@ -95,6 +118,11 @@ def agregate_objectsize_to_functions(df_func, df_objects, thread=None) -> pd.Dat
 
 
 def show_treemap(df_func, max_depth):
+    """
+    Function to make Treemap graph with size of object allocations in function
+    :param df_func: DataFrame of functions
+    :param max_depth: max depth
+    """
     df_func = df_func[df_func['depth'] <= max_depth]
     stack = np.stack((df_func['class'], df_func['function'], df_func['cpuTime'], df_func['wallTime'], df_func['count']),
                      axis=-1)
@@ -125,6 +153,12 @@ def show_treemap(df_func, max_depth):
 
 
 def show_treemap_func(df_func, max_depth, thread):
+    """
+    Function to make Treemap graph of functions
+    :param df_func: DataFrame of functions
+    :param max_depth: max depth
+    :param thread: thread name
+    """
     df_func = df_func[df_func['TID'] == thread]
     df_func = df_func[df_func['depth'] <= max_depth]
     stack = np.stack((df_func['class'], df_func['function'], df_func['cpuTime'], df_func['wallTime']), axis=-1)
@@ -150,6 +184,12 @@ def show_treemap_func(df_func, max_depth, thread):
 
 
 def filter_objets(df_obj, number) -> pd.DataFrame:
+    """
+    Function to filter objects for Scatter plot graph
+    :param df_obj: DataFrame of objects
+    :param number: number of objects to filter
+    :return: DataFrame of filtered objects
+    """
     df2 = df_obj.copy()
     maxValue = max(df2['eWALLt'])
     df2['eWALLt'] = maxValue - df2['eWALLt']
@@ -164,6 +204,13 @@ def filter_objets(df_obj, number) -> pd.DataFrame:
 
 
 def make_scatterplot(df_obj, name, valueX, save_path):
+    """
+    Function to show scatter plot
+    :param df_obj: DataFrame of objects
+    :param name: name of save svg
+    :param valueX: value of x cpu/wall time
+    :param save_path: path to save plot
+    """
     df_obj = df_obj[df_obj['objType'] != ""]
     df_obj = df_obj.rename(columns={'objSize': 'Object size (Bytes)'})
 
@@ -185,6 +232,14 @@ def make_scatterplot(df_obj, name, valueX, save_path):
 
 
 def display_top_callbacks_functions(df_func, topN, name, save_path, sortBy):
+    """
+    Function to make plot of top callbacks functions
+    :param df_func: DataFrame of functions
+    :param topN: number of functions to show
+    :param name: name of save plot
+    :param save_path: path to save plot
+    :param sortBy: sort by
+    """
     by = 'fID'
     if sortBy == 'count':
         by = 'fName'
@@ -210,6 +265,14 @@ def display_top_callbacks_functions(df_func, topN, name, save_path, sortBy):
 
 
 def display_top_allocation_objects(df_obj, topN, name, save_path, sortBy):
+    """
+    Function to display top allocations of objects
+    :param df_obj: DataFrame of objects
+    :param topN: number of objects to show
+    :param name: name of save plot
+    :param save_path: path to save plot
+    :param sortBy: sort by
+    """
     df_obj = df_obj[df_obj['objType'] != ""]
     count_functions = df_obj.groupby('objType').size().reset_index(name='count')
     grouped_df = df_obj.groupby(['objType']).agg({
@@ -227,6 +290,13 @@ def display_top_allocation_objects(df_obj, topN, name, save_path, sortBy):
 
 
 def make_gc_df(data, name, time) -> pd.DataFrame:
+    """
+    Function to make garbage collection dataFrame
+    :param data: profile JSON data
+    :param name: name of save plot
+    :param time: GC pressure calculation
+    :return: DataFrame of garbage collection data
+    """
     gc_events = []
     for key in data:
         if key.startswith('GCStarted'):
@@ -267,6 +337,11 @@ def make_gc_df(data, name, time) -> pd.DataFrame:
 
 
 def make_profiler_df(data) -> pd.DataFrame:
+    """
+    Function to make DataFrame of program start/finish
+    :param data: data JSON profile
+    :return: DataFrame of program start/finish
+    """
     pr_events = []
     for key in data:
         if key.startswith('Profiler'):
@@ -283,25 +358,8 @@ def make_profiler_df(data) -> pd.DataFrame:
     return df
 
 
-def dealloc_info(df_obj, gc_number):
-    df2 = df_obj.copy()
-    df_gc_1 = df_obj[df_obj['GC'] == gc_number]
-
-    display(df_gc_1)
-    sum_col1 = df_gc_1['objSize'].sum()
-    count = df_gc_1['objSize'].count()
-    print(sum_col1)
-    print(count)
-    df_r = df_obj[df2['untilGC'] == gc_number]
-    # display_top_allocation_objects(dfObjects, 10, name, 'count')
-    # display_top_allocation_objects(dfObjects, 10, name, 'objSize')
-    sum_col1 = df_r['objSize'].sum()
-    count = df_r['objSize'].count()
-    print(sum_col1)
-    print(count)
-
-
 def start_program():
+    # Parse arguments
     parser = argparse.ArgumentParser(description="PerunCSharp Profiler visualization module")
     parser.add_argument("-p", "--path", default="Data/data.json", help="path to profile file")
     parser.add_argument("-gs", "--gScatterPlot", choices=['wallTime', 'cpuTime'],
@@ -327,6 +385,8 @@ def start_program():
         return
     mode = args.mode
     thread = args.thread
+
+    # mode configuration
     if mode == 0:
         try:
             dfFunctions = make_function_df(data)
