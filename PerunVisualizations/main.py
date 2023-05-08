@@ -223,7 +223,7 @@ def make_scatterplot(df_obj, name, valueX, save_path):
     ax = sns.scatterplot(x=valueX, y='objType', size='Object size (Bytes)', hue='Object type', data=df_obj)
 
     ax.set_ylabel('Object types')
-    ax.set_xlabel('WALL time [s]')
+    ax.set_xlabel(valueX+' [s]')
     plt.subplots_adjust(left=0.3)
     plt.title('Scatter Plot of Object Allocation ')
 
