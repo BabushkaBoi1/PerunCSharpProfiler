@@ -361,19 +361,23 @@ def make_profiler_df(data) -> pd.DataFrame:
 def start_program():
     # Parse arguments
     parser = argparse.ArgumentParser(description="PerunCSharp Profiler visualization module")
-    parser.add_argument("-p", "--path", default="Data/data.json", help="path to profile file")
+    parser.add_argument("-p", "--path", default="Data/data.json", help="Set path to profile data file (extension .json)")
     parser.add_argument("-gs", "--gScatterPlot", choices=['wallTime', 'cpuTime'],
                         help="Scatter plot in wall/cpu time, second value is number of types of objets")
     parser.add_argument("-gt", "--gTreemap", choices=['functions', 'functionsWithAlloc'],
                         help="Treemap mode for only functions or functions with allocation (default functions)")
-    parser.add_argument("-t", "--thread", help="name of thread")
+    parser.add_argument("-t", "--thread", help="Set name of thread to be shown at treeMap graph or tables")
     parser.add_argument("-n", "--number", default=10, type=int, help="show this number, can be use with any graph/table"
                                                                      "(default 10)")
-    parser.add_argument("-s", "--savePath", default="Plots", help="path to save plot")
-    parser.add_argument("-m", "--mode", choices=[0, 1, 2], type=int, default=0, help="mode for profile (default 0)")
-    parser.add_argument("-tabF", "--tableFunctions", choices=['count', 'wallTime', 'cpuTime'], help="Table for "
-                                                                                                    "functions")
-    parser.add_argument("-tabO", "--tableObjects", choices=['count', 'objSize'], help="Table for objects")
+    parser.add_argument("-s", "--savePath", default="Plots", help="Set path to save plot (default /Plots)")
+    parser.add_argument("-m", "--mode", choices=[0, 1, 2], type=int, default=0, help="Set mode for profile data"
+                                                                                     "(default 0)")
+    parser.add_argument("-tabF", "--tableFunctions", choices=['count', 'wallTime', 'cpuTime'],
+                        help="Make table plot for functions")
+    parser.add_argument("-tabO", "--tableObjects", choices=['count', 'objSize'],
+                        help="Make table plot for objects")
+    parser.add_argument("-tabT", "--tableThreads", choices=['functions', 'objects'],
+                        help="Make plot table of threads with count of functions or objects")
 
     args = parser.parse_args()
     name = os.path.splitext(os.path.basename(args.path))[0]
@@ -441,6 +445,16 @@ def start_program():
 
     if getattr(args, 'tableObjects'):
         display_top_allocation_objects(dfObjects, args.number, name, args.savePath,  args.tableObjects)
+
+    if getattr(args, 'tableThreads'):
+        if mode != 2 and args.tableThreads == "functions":
+            df_thread_fn = make_threads_df_func(dfFunctions)
+            display(df_thread_fn)
+        elif mode != 1 and args.tableThreads == "objects":
+            df_thread_ob = make_threads_df_obj(dfObjects)
+            display(df_thread_ob)
+        else:
+            print("Error: profile data are not compatible!")
 
 
 if __name__ == "__main__":
